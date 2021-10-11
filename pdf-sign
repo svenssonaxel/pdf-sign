@@ -112,7 +112,6 @@ def main(filePath, pagestr=None):
                 root.destroy()
             # Window and menu
             root = tk.Tk()
-            root.title("Hello Tkinter")
             rootmenu = tk.Menu(root)
             root.config(menu=rootmenu)
             filemenu = tk.Menu(rootmenu, tearoff=0)
@@ -187,11 +186,15 @@ def main(filePath, pagestr=None):
             root._docView.bind('<Configure>', onDocViewResize)
             root._docView.pack(expand=1)
             root._docViewIndex=root._docView.create_image(0, 0, anchor=tk.NW)
+            @Cell
+            def updateTitle():
+                root.title(f'Signing page {pageNumber()}/{pageCount} of {filePath}')
             def update():
                 (w, h) = displaySize()
                 root._docImg = tk.PhotoImage(file=displayPNG())
                 root._docView.itemconfig(root._docViewIndex, image=root._docImg)
                 root._docView.configure(width=w, height=h)
+                updateTitle()
             def onclick(event):
                 x=event.x
                 y=event.y
