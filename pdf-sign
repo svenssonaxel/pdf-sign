@@ -2,35 +2,49 @@
 
 #Dependencies: python3, pdftk, gs, mv, pdfinfo
 
-import os, queue, re, subprocess, sys, tempfile, threading, time, tkinter as tk
+import argparse, os, queue, re, subprocess, sys, tempfile, threading, time, tkinter as tk
 
 signatureDir=os.path.expanduser(os.environ['PDF_SIGNATURE_DIR'] if 'PDF_SIGNATURE_DIR' in os.environ else "~/.pdf_signatures")
 
 # Inspired by https://unix.stackexchange.com/a/141496
-def main(filePath, pagestr=None):
-    #filePath=os.path.expanduser(filePath)
+def main(args):
+    filePath=args.input
     with tempfile.TemporaryDirectory() as tempdir:
         intmp=lambda fileName: os.path.join(tempdir, fileName)
-        # Flatten (make forms non-editable) before signing
-        flatPDF=Cell(lambda: subprocess.run(['pdftk', filePath, 'output', intmp('flat.pdf'), 'flatten'], check=True) and intmp('flat.pdf'))
+        # Maybe flatten (make forms non-editable) before signing
+        @Cell
+        def inputPDF():
+            if args.flatten:
+                outFile=intmp('input.pdf')
+                subprocess.run([
+                    'pdftk', filePath,
+                    'output', outFile,
+                    'flatten'
+                ], check=True)
+                return outFile
+            return filePath
         # The chosen page
-        pageCount=pdfCountPages(flatPDF())
-        pageNumber=Cell(int(pagestr) if pagestr else pageCount)
-        pagePDF=Cell(lambda: subprocess.run(['pdftk', flatPDF(), 'cat', str(pageNumber()), 'output', intmp('page.pdf')], check=True) and intmp('page.pdf'))
+        pageCount=pdfCountPages(inputPDF())
+        if args.page < -pageCount or args.page==0 or pageCount < args.page:
+            die('Page number out of range')
+        pageNumber=Cell(args.page if 0 < args.page else pageCount+args.page+1)
+        pagePDF=Cell(lambda: subprocess.run(['pdftk', inputPDF(), 'cat', str(pageNumber()), 'output', intmp('page.pdf')], check=True) and intmp('page.pdf'))
         pageSize=Cell(lambda: pdfGetSize(pagePDF()))
         # The chosen signature
-        signatures=[*filter(lambda x: m("^.*\.pdf$", x), os.listdir(signatureDir))]
+        if not args.signature and args.batch:
+            die('In batch mode, signature must be specified.')
+        signatures=[*filter(lambda x: m("^.*\.pdf$", x), os.listdir(signatureDir))] if not args.signature else [None]
         signatureIndex=Cell(0)
-        signatureAbsPath=Cell(lambda: os.path.join(signatureDir, signatures[signatureIndex()]))
-        signatureSize=Cell(lambda: pdfGetSize(signatureAbsPath()))
-        signaturePositionX=Cell(0.5)
-        signaturePositionY=Cell(0.75)
+        signaturePath=Cell(lambda: args.signature if args.signature else os.path.join(signatureDir, signatures[signatureIndex()]))
+        signatureSize=Cell(lambda: pdfGetSize(signaturePath()))
+        signaturePositionX=Cell(args.x_coordinate)
+        signaturePositionY=Cell(args.y_coordinate)
         signatureScale=Cell(0)
         @Cell
         def signaturePositionedPDF():
             (w, h)=pageSize()
             (sw, sh)=signatureSize()
-            resize=1.1**signatureScale()*min(w/sw, h/sh)/3
+            resize=1.1**signatureScale()*min(args.width*w/sw, args.height*h/sh)
             dx=w*signaturePositionX()/resize - sw/2
             dy=h*(1-signaturePositionY())/resize - sh/2
             outFile=intmp('signature-positioned.pdf')
@@ -40,7 +54,7 @@ def main(filePath, pagestr=None):
                 '-sDEVICE=pdfwrite',
                 f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}', '-dFIXEDMEDIA',
                 '-c', f'<</BeginPage{{{resize} {resize} scale {dx} {dy} translate}}>> setpagedevice',
-                '-f', signatureAbsPath(),
+                '-f', signaturePath(),
             ], check=True)
             return outFile
         # The signed page
@@ -73,7 +87,7 @@ def main(filePath, pagestr=None):
             return outFile
         # GUI
         doSign=True
-        gui=True
+        gui=not args.batch
         if gui:
             doSign=False
             # Commands
@@ -126,9 +140,10 @@ def main(filePath, pagestr=None):
             pagemenu.add_command(label='Last page', underline=0, accelerator='End', command=cmd_lastPage)
             placemenu = tk.Menu(rootmenu, tearoff=0)
             rootmenu.add_cascade(label="Signature", underline=1, menu=placemenu)
-            placemenu.add_command(label='Previous signature', underline=0, accelerator='Ctrl-Left', command=cmd_prevSignature)
-            placemenu.add_command(label='Next signature', underline=0, accelerator='Ctrl-Right', command=cmd_nextSignature)
-            placemenu.add_separator()
+            if not args.signature:
+                placemenu.add_command(label='Previous signature', underline=0, accelerator='Ctrl-Left', command=cmd_prevSignature)
+                placemenu.add_command(label='Next signature', underline=0, accelerator='Ctrl-Right', command=cmd_nextSignature)
+                placemenu.add_separator()
             placemenu.add_command(label='Enlarge signature', underline=0, accelerator='+', command=cmd_enlargeSignature)
             placemenu.add_command(label='Shrink signature', underline=0, accelerator='-', command=cmd_shrinkSignature)
             placemenu.add_separator()
@@ -208,19 +223,24 @@ def main(filePath, pagestr=None):
         # End of GUI
         if doSign:
             [ignored, pathPart1, pathPart2] = m("^(.*)(\.[Pp][Dd][Ff])$", filePath)
-            signedFilePath=f'{pathPart1}.signed{pathPart2}'
+            signedFilePath=args.output if args.output else f'{pathPart1}.signed{pathPart2}'
             if os.path.exists(signedFilePath):
-                backupFilePath=f'{pathPart1}.signed.backup{time.strftime("%Y%m%d_%H%M%S")}{pathPart2}'
-                subprocess.run([
-                    'mv',
-                    signedFilePath,
-                    backupFilePath,
-                ], check=True)
-                print(f'Renamed {signedFilePath} to {backupFilePath}')
+                if args.existing=='backup':
+                    backupFilePath=f'{signedFilePath}.backup{time.strftime("%Y%m%d_%H%M%S")}'
+                    subprocess.run([
+                        'mv',
+                        signedFilePath,
+                        backupFilePath,
+                    ], check=True)
+                    print(f'Renamed {signedFilePath} to {backupFilePath}')
+                elif args.existing=='fail':
+                    die(f'Output file {signedFilePath} already exists')
+                else:
+                    assert args.existing=='overwrite'
             pnr=pageNumber()
             subprocess.run([
                 'pdftk',
-                f'A={flatPDF()}',
+                f'A={inputPDF()}',
                 f'B={signedPagePDF()}',
                 'cat',
                 *([f'A1-{pnr-1}'] if 1 < pnr else []),
@@ -310,4 +330,21 @@ class NonBlockingIterable:
             except queue.Empty:
                 yield None
 
-main(*sys.argv[1:])
+def die(reason):
+    print(reason, file=sys.stderr)
+    sys.exit(2)
+
+parser = argparse.ArgumentParser(description='Sign a PDF file.')
+parser.add_argument('input', metavar='input.pdf', type=str, help='Input PDF file.')
+parser.add_argument('-p', '--page', type=int, default=-1, help='The page to sign, negative for counting from the end. (default: -1)')
+parser.add_argument('-s', '--signature', type=str, help='Path to file used as signature. Required in batch mode. In GUI mode, the user can choose among files in $PDF_SIGNATURE_DIR or ~/.pdf_signatures.')
+parser.add_argument('-x', '--x-coordinate', type=float, default=0.5, help='Horizontal coordinate of signature center, in page width units. (default: 0.5)')
+parser.add_argument('-y', '--y-coordinate', type=float, default=0.75, help='Vertical coordinate of signature center, in page height units. (default: 0.75)')
+parser.add_argument('-W', '--width', type=float, default=0.28, help='Width of box to fit signature to, in page width units. (default: 0.28)')
+parser.add_argument('-H', '--height', type=float, default=0.28, help='Height of box to fit signature to, in page height units. (default: 0.28)')
+parser.add_argument('-o', '--output', type=str, help='Output file. (default: Add ".signed" before the extension)')
+parser.add_argument('-b', '--batch', action=argparse.BooleanOptionalAction, default=False, help='Batch mode: do not show GUI.')
+parser.add_argument('-f', '--flatten', action=argparse.BooleanOptionalAction, default=True, help='Flatten before signing.')
+parser.add_argument('-e', '--existing', type=str, choices=['backup', 'overwrite', 'fail'], default='backup', help='What to do if output file exists. (default: backup)')
+
+main(parser.parse_args(sys.argv[1:] or ['-h']))
