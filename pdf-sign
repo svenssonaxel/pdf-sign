@@ -2,20 +2,21 @@
 
 #Dependencies: python3, pdftk, gs, mv, pdfinfo
 
-import contextlib, os, queue, re, subprocess, sys, tempfile, threading, time, tkinter as tk
+import os, queue, re, subprocess, sys, tempfile, threading, time, tkinter as tk
 
 signatureDir=os.path.expanduser(os.environ['PDF_SIGNATURE_DIR'] if 'PDF_SIGNATURE_DIR' in os.environ else "~/.pdf_signatures")
 
 # Inspired by https://unix.stackexchange.com/a/141496
 def main(filePath, pagestr=None):
-    fileAbsPath=os.path.abspath(filePath)
-    with inTmpDir():
+    #filePath=os.path.expanduser(filePath)
+    with tempfile.TemporaryDirectory() as tempdir:
+        intmp=lambda fileName: os.path.join(tempdir, fileName)
         # Flatten (make forms non-editable) before signing
-        flatPDF=Cell(lambda: subprocess.run(['pdftk', fileAbsPath, 'output', 'flat.pdf', 'flatten'], check=True) and 'flat.pdf')
+        flatPDF=Cell(lambda: subprocess.run(['pdftk', filePath, 'output', intmp('flat.pdf'), 'flatten'], check=True) and intmp('flat.pdf'))
         # The chosen page
         pageCount=pdfCountPages(flatPDF())
         pageNumber=Cell(int(pagestr) if pagestr else pageCount)
-        pagePDF=Cell(lambda: subprocess.run(['pdftk', flatPDF(), 'cat', str(pageNumber()), 'output', 'page.pdf'], check=True) and 'page.pdf')
+        pagePDF=Cell(lambda: subprocess.run(['pdftk', flatPDF(), 'cat', str(pageNumber()), 'output', intmp('page.pdf')], check=True) and intmp('page.pdf'))
         pageSize=Cell(lambda: pdfGetSize(pagePDF()))
         # The chosen signature
         signatures=[*filter(lambda x: m("^.*\.pdf$", x), os.listdir(signatureDir))]
@@ -32,22 +33,23 @@ def main(filePath, pagestr=None):
             resize=1.1**signatureScale()*min(w/sw, h/sh)/3
             dx=w*signaturePositionX()/resize - sw/2
             dy=h*(1-signaturePositionY())/resize - sh/2
+            outFile=intmp('signature-positioned.pdf')
             subprocess.run([
                 'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
-                '-sOutputFile=page.signature.pdf',
+                f'-sOutputFile={outFile}',
                 '-sDEVICE=pdfwrite',
                 f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}', '-dFIXEDMEDIA',
                 '-c', f'<</BeginPage{{{resize} {resize} scale {dx} {dy} translate}}>> setpagedevice',
                 '-f', signatureAbsPath(),
             ], check=True)
-            return 'page.signature.pdf'
+            return outFile
         # The signed page
         signedPagePDF=Cell(lambda: subprocess.run([
             'pdftk',
             pagePDF(),
             'stamp', signaturePositionedPDF(),
-            'output', 'page.signed.pdf',
-        ], check=True) and 'page.signed.pdf')
+            'output', intmp('signed-page.pdf'),
+        ], check=True) and intmp('signed-page.pdf'))
         # The signed page as PNG, for GUI use
         displayMaxSize=Cell((400, 800))
         @Cell
@@ -59,15 +61,16 @@ def main(filePath, pagestr=None):
         @Cell
         def displayPNG():
             (w, h)=displaySize()
+            outFile=intmp('display.png')
             subprocess.run([
                 'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
-                '-sOutputFile=page.display.png',
+                f'-sOutputFile={outFile}',
                 '-sDEVICE=pngalpha',
                 '-dMaxBitmap=2147483647',
                 f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}', '-dFIXEDMEDIA', '-dPDFFitPage',
                 '-f', signedPagePDF(),
             ], check=True)
-            return './page.display.png'
+            return outFile
         # GUI
         doSign=True
         gui=True
@@ -201,16 +204,16 @@ def main(filePath, pagestr=None):
             root.mainloop()
         # End of GUI
         if doSign:
-            [ignored, pathPart1, pathPart2] = m("^(.*)(\.[Pp][Dd][Ff])$", fileAbsPath)
-            signedFileAbsPath=f'{pathPart1}.signed{pathPart2}'
-            if os.path.exists(signedFileAbsPath):
-                backupFileAbsPath=f'{pathPart1}.signed.backup{time.strftime("%Y%m%d_%H%M%S")}{pathPart2}'
+            [ignored, pathPart1, pathPart2] = m("^(.*)(\.[Pp][Dd][Ff])$", filePath)
+            signedFilePath=f'{pathPart1}.signed{pathPart2}'
+            if os.path.exists(signedFilePath):
+                backupFilePath=f'{pathPart1}.signed.backup{time.strftime("%Y%m%d_%H%M%S")}{pathPart2}'
                 subprocess.run([
                     'mv',
-                    signedFileAbsPath,
-                    backupFileAbsPath,
+                    signedFilePath,
+                    backupFilePath,
                 ], check=True)
-                print(f'Renamed {signedFileAbsPath} to {backupFileAbsPath}')
+                print(f'Renamed {signedFilePath} to {backupFilePath}')
             pnr=pageNumber()
             subprocess.run([
                 'pdftk',
@@ -220,9 +223,9 @@ def main(filePath, pagestr=None):
                 *([f'A1-{pnr-1}'] if 1 < pnr else []),
                 'B',
                 *([f'A{pnr+1}-end'] if pnr < pageCount else []),
-                'output', signedFileAbsPath,
+                'output', signedFilePath,
             ], check=True)
-            print(f'Signed document saved as {signedFileAbsPath}')
+            print(f'Signed document saved as {signedFilePath}')
         else:
             print(f'Aborted')
 
@@ -275,16 +278,6 @@ def m(pattern, string):
     for index in range((match.lastindex or 0)+1):
         ret.append(match.group(index))
     return ret
-
-@contextlib.contextmanager
-def inTmpDir():
-    olddir = os.getcwd()
-    with tempfile.TemporaryDirectory() as tempdir:
-        try:
-            os.chdir(tempdir)
-            yield
-        finally:
-            os.chdir(olddir)
 
 def fromCmdOutput(cmd, pattern):
     sp=subprocess.run(cmd, check=True, capture_output=True)
