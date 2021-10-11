@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+
+#Dependencies: python3, pdftk, gs, mv, pdfinfo
+
+import contextlib, os, queue, re, subprocess, sys, tempfile, threading, time, tkinter as tk
+
+signatureDir=os.path.expanduser(os.environ['PDF_SIGNATURE_DIR'] if 'PDF_SIGNATURE_DIR' in os.environ else "~/.pdf_signatures")
+
+# Inspired by https://unix.stackexchange.com/a/141496
+def main(filePath, pagestr=None):
+    fileAbsPath=os.path.abspath(filePath)
+    with inTmpDir():
+        # Flatten (make forms non-editable) before signing
+        flatPDF=Cell(lambda: subprocess.run(['pdftk', fileAbsPath, 'output', 'flat.pdf', 'flatten'], check=True) and 'flat.pdf')
+        # The chosen page
+        pageCount=pdfCountPages(flatPDF())
+        pageNumber=Cell(int(pagestr) if pagestr else pageCount)
+        pagePDF=Cell(lambda: subprocess.run(['pdftk', flatPDF(), 'cat', str(pageNumber()), 'output', 'page.pdf'], check=True) and 'page.pdf')
+        pageSize=Cell(lambda: pdfGetSize(pagePDF()))
+        # The chosen signature
+        signatures=[*filter(lambda x: m("^.*\.pdf$", x), os.listdir(signatureDir))]
+        signatureIndex=Cell(0)
+        signatureAbsPath=Cell(lambda: os.path.join(signatureDir, signatures[signatureIndex()]))
+        signatureSize=Cell(lambda: pdfGetSize(signatureAbsPath()))
+        signaturePositionX=Cell(0.5)
+        signaturePositionY=Cell(0.75)
+        signatureScale=Cell(0)
+        @Cell
+        def signaturePositionedPDF():
+            (w, h)=pageSize()
+            (sw, sh)=signatureSize()
+            resize=1.1**signatureScale()*min(w/sw, h/sh)/3
+            dx=w*signaturePositionX()/resize - sw/2
+            dy=h*(1-signaturePositionY())/resize - sh/2
+            subprocess.run([
+                'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+                '-sOutputFile=page.signature.pdf',
+                '-sDEVICE=pdfwrite',
+                f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}', '-dFIXEDMEDIA',
+                '-c', f'<</BeginPage{{{resize} {resize} scale {dx} {dy} translate}}>> setpagedevice',
+                '-f', signatureAbsPath(),
+            ], check=True)
+            return 'page.signature.pdf'
+        # The signed page
+        signedPagePDF=Cell(lambda: subprocess.run([
+            'pdftk',
+            pagePDF(),
+            'stamp', signaturePositionedPDF(),
+            'output', 'page.signed.pdf',
+        ], check=True) and 'page.signed.pdf')
+        # The signed page as PNG, for GUI use
+        displayMaxSize=Cell((400, 800))
+        @Cell
+        def displaySize():
+            (maxWidth, maxHeight)=displayMaxSize()
+            (pageWidth, pageHeight)=pageSize()
+            scale=min(maxWidth/pageWidth, maxHeight/pageWidth)
+            return (int(pageWidth*scale), int(pageHeight*scale))
+        @Cell
+        def displayPNG():
+            (w, h)=displaySize()
+            subprocess.run([
+                'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+                '-sOutputFile=page.display.png',
+                '-sDEVICE=pngalpha',
+                '-dMaxBitmap=2147483647',
+                f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}', '-dFIXEDMEDIA', '-dPDFFitPage',
+                '-f', signedPagePDF(),
+            ], check=True)
+            return './page.display.png'
+        # GUI
+        doSign=True
+        gui=True
+        if gui:
+            doSign=False
+            # Commands
+            def uf(fun):
+                def ret():
+                    fun()
+                    update()
+                return ret
+            @uf
+            def cmd_prevPage():
+                if 1<pageNumber():
+                    pageNumber(pageNumber()-1)
+            @uf
+            def cmd_nextPage():
+                if pageNumber()<pageCount:
+                    pageNumber(pageNumber()+1)
+            cmd_firstPage = uf(lambda: pageNumber(1))
+            cmd_lastPage = uf(lambda: pageNumber(pageCount))
+            cmd_nextSignature = uf(lambda: signatureIndex((signatureIndex()+1)%len(signatures)))
+            cmd_prevSignature = uf(lambda: signatureIndex((signatureIndex()-1)%len(signatures)))
+            cmd_moveSignatureUp = uf(lambda: signaturePositionY(signaturePositionY()-0.02))
+            cmd_moveSignatureDown = uf(lambda: signaturePositionY(signaturePositionY()+0.02))
+            cmd_moveSignatureLeft = uf(lambda: signaturePositionX(signaturePositionX()-0.02))
+            cmd_moveSignatureRight = uf(lambda: signaturePositionX(signaturePositionX()+0.02))
+            cmd_enlargeSignature = uf(lambda: signatureScale(signatureScale()+1))
+            cmd_shrinkSignature = uf(lambda: signatureScale(signatureScale()-1))
+            def cmd_positionSignature(x, y):
+                signaturePositionX(x)
+                signaturePositionY(y)
+                update()
+            def cmd_abort():
+                root.destroy()
+            def cmd_sign():
+                nonlocal doSign
+                doSign=True
+                root.destroy()
+            # Window and menu
+            root = tk.Tk()
+            root.title("Hello Tkinter")
+            rootmenu = tk.Menu(root)
+            root.config(menu=rootmenu)
+            filemenu = tk.Menu(rootmenu, tearoff=0)
+            rootmenu.add_cascade(label="File", underline=0, menu=filemenu)
+            filemenu.add_command(label='Sign & Exit', underline=0, accelerator='space / S', command=cmd_sign)
+            filemenu.add_command(label='Abort & Exit', underline=0, accelerator='Esc / Q', command=cmd_abort)
+            pagemenu = tk.Menu(rootmenu, tearoff=0)
+            rootmenu.add_cascade(label="Page", underline=0, menu=pagemenu)
+            pagemenu.add_command(label='First page', underline=0, accelerator='Home', command=cmd_firstPage)
+            pagemenu.add_command(label='Previous page', underline=0, accelerator='PgUp', command=cmd_prevPage)
+            pagemenu.add_command(label='Next page', underline=0, accelerator='PgDown', command=cmd_nextPage)
+            pagemenu.add_command(label='Last page', underline=0, accelerator='End', command=cmd_lastPage)
+            placemenu = tk.Menu(rootmenu, tearoff=0)
+            rootmenu.add_cascade(label="Signature", underline=1, menu=placemenu)
+            placemenu.add_command(label='Previous signature', underline=0, accelerator='Ctrl-Left', command=cmd_prevSignature)
+            placemenu.add_command(label='Next signature', underline=0, accelerator='Ctrl-Right', command=cmd_nextSignature)
+            placemenu.add_separator()
+            placemenu.add_command(label='Enlarge signature', underline=0, accelerator='+', command=cmd_enlargeSignature)
+            placemenu.add_command(label='Shrink signature', underline=0, accelerator='-', command=cmd_shrinkSignature)
+            placemenu.add_separator()
+            placemenu.add_command(label='Move signature left', underline=15, accelerator='Click / Left', command=cmd_moveSignatureLeft)
+            placemenu.add_command(label='Move signature down', underline=15, accelerator='Click / Down', command=cmd_moveSignatureDown)
+            placemenu.add_command(label='Move signature up', underline=15, accelerator='Click / Up', command=cmd_moveSignatureUp)
+            placemenu.add_command(label='Move signature right', underline=15, accelerator='Click / Right', command=cmd_moveSignatureRight)
+            # Key bindings
+            keyToFunction={
+                'Prior': cmd_prevPage,
+                'Next': cmd_nextPage,
+                'Home': cmd_firstPage,
+                'End': cmd_lastPage,
+                'C-Left': cmd_prevSignature,
+                'C-Right': cmd_nextSignature,
+                'Left': cmd_moveSignatureLeft,
+                'Down': cmd_moveSignatureDown,
+                'Up': cmd_moveSignatureUp,
+                'Right': cmd_moveSignatureRight,
+                'plus': cmd_enlargeSignature,
+                'minus': cmd_shrinkSignature,
+                'Escape': cmd_abort,
+                'Q': cmd_abort,
+                'q': cmd_abort,
+                'S': cmd_sign,
+                's': cmd_sign,
+                'space': cmd_sign,
+            }
+            def onkey(event):
+                key=('C-' if event.state in [4, 5] else '')+event.keysym
+                if key in keyToFunction:
+                    keyToFunction[key]()
+            for key in keyToFunction.keys():
+                root.bind(f'<{key.split("-")[-1]}>', onkey)
+            # Canvas and click binding
+            root._docView=tk.Canvas(root, borderwidth=0, background='#ffffff', confine=True)
+            def onDocViewResize(event):
+                canvasMarginX=event.x
+                canvasMarginY=event.y
+                canvasWidth=event.width
+                canvasHeight=event.height
+                (oldMaxWidth, oldMaxHeight)=displayMaxSize()
+                if(0<canvasMarginX and 0<canvasMarginY):
+                    apparentScale=max(canvasHeight/oldMaxHeight, canvasWidth/oldMaxWidth, 0.5)
+                    newMaxWidth=int((canvasWidth+2*canvasMarginX)/apparentScale-10)
+                    newMaxHeight=int((canvasHeight+2*canvasMarginY)/apparentScale-10)
+                    if(5<abs(oldMaxWidth-newMaxWidth) or 5<abs(oldMaxHeight-newMaxHeight)):
+                        displayMaxSize((newMaxWidth, newMaxHeight))
+                        update()
+                else:
+                    newMaxWidth=max(int(oldMaxWidth/2), 10)
+                    newMaxHeight=max(int(oldMaxHeight/2), 10)
+                    displayMaxSize((newMaxWidth, newMaxHeight))
+                    update()
+            root._docView.bind('<Configure>', onDocViewResize)
+            root._docView.pack(expand=1)
+            root._docViewIndex=root._docView.create_image(0, 0, anchor=tk.NW)
+            def update():
+                (w, h) = displaySize()
+                root._docImg = tk.PhotoImage(file=displayPNG())
+                root._docView.itemconfig(root._docViewIndex, image=root._docImg)
+                root._docView.configure(width=w, height=h)
+            def onclick(event):
+                x=event.x
+                y=event.y
+                canvasConfig=root._docView.config()
+                canvasWidth=int(canvasConfig['width'][4])
+                canvasHeight=int(canvasConfig['height'][4])
+                cmd_positionSignature(x/canvasWidth, y/canvasHeight)
+            root._docView.bind('<Button-1>', onclick)
+            # Run GUI
+            root.mainloop()
+        # End of GUI
+        if doSign:
+            [ignored, pathPart1, pathPart2] = m("^(.*)(\.[Pp][Dd][Ff])$", fileAbsPath)
+            signedFileAbsPath=f'{pathPart1}.signed{pathPart2}'
+            if os.path.exists(signedFileAbsPath):
+                backupFileAbsPath=f'{pathPart1}.signed.backup{time.strftime("%Y%m%d_%H%M%S")}{pathPart2}'
+                subprocess.run([
+                    'mv',
+                    signedFileAbsPath,
+                    backupFileAbsPath,
+                ], check=True)
+                print(f'Renamed {signedFileAbsPath} to {backupFileAbsPath}')
+            pnr=pageNumber()
+            subprocess.run([
+                'pdftk',
+                f'A={flatPDF()}',
+                f'B={signedPagePDF()}',
+                'cat',
+                *([f'A1-{pnr-1}'] if 1 < pnr else []),
+                'B',
+                *([f'A{pnr+1}-end'] if pnr < pageCount else []),
+                'output', signedFileAbsPath,
+            ], check=True)
+            print(f'Signed document saved as {signedFileAbsPath}')
+        else:
+            print(f'Aborted')
+
+# Simple dependency tracking.
+# Init with a value or function to calculate the value.
+# Update by calling with one argument (as in init).
+# To retrieve an up-to-date value, call with no arguments.
+class Cell():
+    currentCell=None
+    def __init__(self, arg):
+        self._arg=arg
+        self._isuptodate=False
+        self._dependents=[]
+    def __call__(self, *args):
+        if(len(args)==1):
+            self._arg=args[0]
+            self.dirty()
+            return
+        assert len(args)==0
+        if(Cell.currentCell):
+            self._dependents.append(Cell.currentCell)
+        if not self._isuptodate:
+            oldcell=Cell.currentCell
+            Cell.currentCell=self
+            self._value=self._arg() if callable(self._arg) else self._arg
+            self._isuptodate=True
+            Cell.currentCell=oldcell
+        return self._value
+    def dirty(self):
+        if self._isuptodate:
+            self._isuptodate=False
+            for d in self._dependents:
+                d.dirty()
+            self._dependents=[]
+
+def pdfCountPages(filePath):
+    return int(fromCmdOutput(["pdfinfo", filePath], "^.*\nPages: +([0-9]+)\n.*$")[1])
+
+def pdfGetSize(filePath):
+    [ignored, w, h, *ignored2]=fromCmdOutput(['pdfinfo', filePath], '^.*\nPage size: +([0-9.]+) x ([0-9.]+) pts( \([A-Za-z0-9]+\))?\n.*$')
+    return (float(w), float(h))
+
+def m(pattern, string):
+    match = re.match(pattern, string, re.DOTALL)
+    if not match:
+        return None
+    if(match.group(0) != string):
+        die(f'Pattern /${pattern}/ matched only part of string')
+    ret = []
+    for index in range((match.lastindex or 0)+1):
+        ret.append(match.group(index))
+    return ret
+
+@contextlib.contextmanager
+def inTmpDir():
+    olddir = os.getcwd()
+    with tempfile.TemporaryDirectory() as tempdir:
+        try:
+            os.chdir(tempdir)
+            yield
+        finally:
+            os.chdir(olddir)
+
+def fromCmdOutput(cmd, pattern):
+    sp=subprocess.run(cmd, check=True, capture_output=True)
+    result=sp.stdout.decode('utf-8')
+    return m(pattern, result)
+
+# Inspired by http://eyalarubas.com/python-subproc-nonblock.html
+class NonBlockingIterable:
+    def __init__(self, iterable, timeout = 0.3):
+        self._i = iterable
+        self._q = queue.Queue()
+        self._timeout = timeout
+        self._done = False
+        def _populateQueue(iterable, queue):
+            for item in iterable:
+                queue.put(item)
+            self._done = True
+        self._t = threading.Thread(
+            target = _populateQueue,
+            args = (self._i, self._q))
+        self._t.daemon = True
+        self._t.start()
+    def __iter__(self):
+        while not self._done:
+            try:
+                yield self._q.get(block = True, timeout = self._timeout)
+            except queue.Empty:
+                yield None
+
+main(*sys.argv[1:])
