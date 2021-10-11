@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+
+#Dependencies: python3, gs
+
+import argparse, os, re, subprocess, sys
+
+def main(args):
+    d=args.dimensions
+    o=args.output
+    if not o:
+        o=f'empty-{d}.pdf'
+    if os.path.exists(o):
+        die(f'Output file {o} already exists')
+    dm=m("^([0-9.]+)(pts|in)x([0-9.]+)(pts|in)$", d)
+    w=None
+    h=None
+    try:
+        w=int(float(dm[1])*({'pts':1,'in':72}[dm[2]]))
+        h=int(float(dm[3])*({'pts':1,'in':72}[dm[4]]))
+    except:
+        die('Invalid dimensions')
+    subprocess.run([
+        'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+        f'-sOutputFile={o}',
+        '-sDEVICE=pdfwrite',
+        f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}',
+    ], check=True)
+    print(f'Wrote a pdf file with dimensions {w}x{h} pts to {o}')
+
+def m(pattern, string):
+    match = re.match(pattern, string, re.DOTALL)
+    if not match:
+        return None
+    if(match.group(0) != string):
+        die(f'Pattern /${pattern}/ matched only part of string')
+    ret = []
+    for index in range((match.lastindex or 0)+1):
+        ret.append(match.group(index))
+    return ret
+
+def die(reason):
+    print(reason, file=sys.stderr)
+    sys.exit(2)
+
+parser = argparse.ArgumentParser(description='Create an empty, transparent PDF file.')
+parser.add_argument('-o', '--output', metavar='FILE', type=str, help='Output PDF file. (default: empty-DIMENSIONS.pdf)')
+parser.add_argument('-d', '--dimensions', type=str, default='3inx2in', help='The page dimensions of the file to create. Supports pts and in units. (default: 3inx2in)')
+
+main(parser.parse_args(sys.argv[1:]))
