@@ -132,6 +132,8 @@ def main(args):
                 nonlocal doSign
                 doSign=True
                 root.destroy()
+            # Error handling
+            tk.Tk.report_callback_exception = lambda self, exc, val, tb: die(val)
             # Window and menu
             root = tk.Tk()
             rootmenu = tk.Menu(root)
