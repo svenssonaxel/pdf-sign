@@ -225,6 +225,7 @@ def main(args):
             @Cell
             def updateTitle():
                 root.title(f'Signing page {pageNumber()}/{pageCount} of {filePath}')
+            @tkthrottle(100, root)
             def update():
                 (w, h) = displaySize()
                 root._docImg = tk.PhotoImage(file=displayPNG())
@@ -307,6 +308,27 @@ class Cell():
             for d in self._dependents:
                 d.dirty()
             self._dependents=[]
+
+def tkthrottle(frequency, root):
+    wait=1/frequency
+    now=lambda: time.time()
+    def decorator(fn):
+        def throttled():
+            if(throttled._suppressUntil<now()):
+                fn()
+            else:
+                throttled._callAfterWait=True
+            throttled._suppressUntil=now()+wait
+            root.after(int(wait*1000+10), atend)
+        def atend():
+            if throttled._callAfterWait:
+                if throttled._suppressUntil<now():
+                    throttled._callAfterWait=False
+                    fn()
+        throttled._suppressUntil=0
+        throttled._callAfterWait=False
+        return throttled
+    return decorator
 
 def pdfCountPages(filePath):
     return int(fromCmdOutput(["pdfinfo", filePath], "^.*\nPages: +([0-9]+)\n.*$")[1])
