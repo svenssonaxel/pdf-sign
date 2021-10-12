@@ -331,29 +331,6 @@ def fromCmdOutput(cmd, pattern):
     result=sp.stdout.decode('utf-8')
     return m(pattern, result)
 
-# Inspired by http://eyalarubas.com/python-subproc-nonblock.html
-class NonBlockingIterable:
-    def __init__(self, iterable, timeout = 0.3):
-        self._i = iterable
-        self._q = queue.Queue()
-        self._timeout = timeout
-        self._done = False
-        def _populateQueue(iterable, queue):
-            for item in iterable:
-                queue.put(item)
-            self._done = True
-        self._t = threading.Thread(
-            target = _populateQueue,
-            args = (self._i, self._q))
-        self._t.daemon = True
-        self._t.start()
-    def __iter__(self):
-        while not self._done:
-            try:
-                yield self._q.get(block = True, timeout = self._timeout)
-            except queue.Empty:
-                yield None
-
 def die(reason):
     print(reason, file=sys.stderr)
     sys.exit(2)
