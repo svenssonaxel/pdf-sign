@@ -122,6 +122,10 @@ def main(args):
                 signaturePositionX(x)
                 signaturePositionY(y)
                 update()
+            def cmd_selectSignatureByIndex(i):
+                if i<len(signatures):
+                    signatureIndex(i)
+                    update()
             def cmd_abort():
                 root.destroy()
             def cmd_sign():
@@ -147,6 +151,15 @@ def main(args):
             if not args.signature:
                 placemenu.add_command(label='Previous signature', underline=0, accelerator='Ctrl-Left', command=cmd_prevSignature)
                 placemenu.add_command(label='Next signature', underline=0, accelerator='Ctrl-Right', command=cmd_nextSignature)
+                placemenu.add_separator()
+                root.signatureControlVar=tk.IntVar()
+                root.signatureControlVar.set(signatureIndex())
+                def updateFromSignatureRadio():
+                    if root.signatureControlVar.get() != signatureIndex():
+                        signatureIndex(root.signatureControlVar.get())
+                        update()
+                for index, filename in enumerate(signatures):
+                    placemenu.add_radiobutton(value=index, label=filename, variable=root.signatureControlVar, accelerator=(str(index+1) if index<9 else None), command=updateFromSignatureRadio)
                 placemenu.add_separator()
             placemenu.add_command(label='Enlarge signature', underline=0, accelerator='+', command=cmd_enlargeSignature)
             placemenu.add_command(label='Shrink signature', underline=0, accelerator='-', command=cmd_shrinkSignature)
@@ -182,6 +195,10 @@ def main(args):
                     keyToFunction[key]()
             for key in keyToFunction.keys():
                 root.bind(f'<{key.split("-")[-1]}>', onkey)
+            def bindDigit(i, char):
+                keyToFunction[char]=lambda: cmd_selectSignatureByIndex(i)
+                root.bind(f'{char}', onkey)
+            for i, char in enumerate("123456789"): bindDigit(i, char)
             # Canvas and click binding
             root._docView=tk.Canvas(root, borderwidth=0, background='#ffffff', confine=True)
             def onDocViewResize(event):
@@ -214,6 +231,9 @@ def main(args):
                 root._docView.itemconfig(root._docViewIndex, image=root._docImg)
                 root._docView.configure(width=w, height=h)
                 updateTitle()
+                if not args.signature:
+                    if root.signatureControlVar.get() != signatureIndex():
+                        root.signatureControlVar.set(signatureIndex())
             def onclick(event):
                 x=event.x
                 y=event.y
