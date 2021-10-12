@@ -19,13 +19,16 @@ You can now use the `pdf-sign` tool interactively (or non-interactively) to sign
 Run `pdf-sign -h` or `pdf-create-empty -h` for details.
 
 Installation:
-Copy one or both tools to a directory in your `$PATH`.
-Dependencies:
-* `python3`
-* `pdftk`
-* `gs` (ghostscript)
-* `mv` (coreutils)
-* `pdfinfo` (poppler-utils)
+* Install dependencies: `gs`, `mv`, `pdfinfo`, `pdftk`, `python3` and python3 module `tkinter`.
+* Copy one or both tools to a directory in your `$PATH`.
+
+Installation on Debian:
+```sh
+apt-get update && apt-get install -y coreutils ghostscript git pdftk poppler-utils python3 python3-tk
+git clone https://github.com/svenssonaxel/pdf-sign.git
+cd pdf-sign
+cp pdf-sign pdf-create-empty /usr/local/bin/
+```
 
 ## Why
 
