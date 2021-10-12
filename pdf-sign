@@ -2,7 +2,7 @@
 
 #Dependencies: python3, pdftk, gs, mv, pdfinfo
 
-import argparse, os, queue, re, subprocess, sys, tempfile, threading, time, tkinter as tk
+import argparse, os, queue, re, subprocess, sys, tempfile, threading, time
 
 signatureDir=os.path.expanduser(os.environ['PDF_SIGNATURE_DIR'] if 'PDF_SIGNATURE_DIR' in os.environ else "~/.pdf_signatures")
 
@@ -89,6 +89,10 @@ def main(args):
         doSign=True
         gui=not args.batch
         if gui:
+            try:
+                import tkinter as tk
+            except ModuleNotFoundError:
+                die('Cannot find Python module `tkinter`, which is needed for interactive use.')
             doSign=False
             # Commands
             def uf(fun):
