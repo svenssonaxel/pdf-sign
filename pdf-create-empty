@@ -11,12 +11,12 @@ def main(args):
         o=f'empty-{d}.pdf'
     if os.path.exists(o):
         die(f'Output file {o} already exists')
-    dm=m("^([0-9.]+)(pts|in)x([0-9.]+)(pts|in)$", d)
+    dm=m("^([0-9.]+)(pts|pt|in|cm|mm)x([0-9.]+)(pts|pt|in|cm|mm)$", d)
     w=None
     h=None
     try:
-        w=int(float(dm[1])*({'pts':1,'in':72}[dm[2]]))
-        h=int(float(dm[3])*({'pts':1,'in':72}[dm[4]]))
+        w=int(float(dm[1])*({'pts':1,'pt':1,'in':72,'cm':28.3,'mm':2.83}[dm[2]]))
+        h=int(float(dm[3])*({'pts':1,'pt':1,'in':72,'cm':28.3,'mm':2.83}[dm[4]]))
     except:
         die('Invalid dimensions')
     subprocess.run([
@@ -44,6 +44,6 @@ def die(reason):
 
 parser = argparse.ArgumentParser(description='Create an empty, transparent PDF file.')
 parser.add_argument('-o', '--output', metavar='FILE', type=str, help='Output PDF file. (default: empty-DIMENSIONS.pdf)')
-parser.add_argument('-d', '--dimensions', type=str, default='3inx2in', help='The page dimensions of the file to create. Supports pts and in units. (default: 3inx2in)')
+parser.add_argument('-d', '--dimensions', type=str, default='3inx2in', help='The page dimensions of the file to create. Supports units pts, in, cm, and mm. (default: 3inx2in)')
 
 main(parser.parse_args(sys.argv[1:]))
