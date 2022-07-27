@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-#Dependencies: python3, pdftk, gs, mv, pdfinfo
+#Dependencies: python3.7 or later with module tkinter, gs (Ghostscript), pdftk and pdfinfo.
 
 import argparse, os, queue, re, subprocess, sys, tempfile, time
 
@@ -358,6 +358,26 @@ def fromCmdOutput(cmd, pattern):
 def die(reason):
     print(reason, file=sys.stderr)
     sys.exit(2)
+
+# Monkey-patch argparse if necessary
+if not 'BooleanOptionalAction' in dir(argparse):
+    class BooleanOptionalAction(argparse.Action):
+        def __init__(self, option_strings, dest, default=None, type=None, choices=None, required=False, help=None, metavar=None):
+            _option_strings = []
+            for option_string in option_strings:
+                _option_strings.append(option_string)
+                if option_string.startswith('--'):
+                    option_string = '--no-' + option_string[2:]
+                    _option_strings.append(option_string)
+            if help is not None and default is not None:
+                help += f" (default: {default})"
+            super().__init__(option_strings=_option_strings, dest=dest, nargs=0, default=default, type=type, choices=choices, required=required, help=help, metavar=metavar)
+        def __call__(self, _parser, namespace, values, option_string=None):
+            if option_string in self.option_strings:
+                setattr(namespace, self.dest, not option_string.startswith('--no-'))
+        def format_usage(self):
+            return ' | '.join(self.option_strings)
+    argparse.BooleanOptionalAction = BooleanOptionalAction
 
 parser = argparse.ArgumentParser(description='Sign a PDF file.')
 parser.add_argument('input', metavar='input.pdf', type=str, help='Input PDF file.')
