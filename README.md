@@ -10,6 +10,7 @@ We are here referring to the visible, non-cryptographic squiggles.
 First, create one or several signatures in the form of small PDF files with transparent backgrounds.
 The recommended way is:
 * Use the included `pdf-create-empty` tool to create an empty, transparent PDF file.
+  If 3×2 inch suits you, you can use [empty-3inx2in.pdf](empty-3inx2in.pdf) directly.
 * Use an application of your choice to sign it.
   You can for example use Okular's Freehand Line, or transfer it to your smartphone and use Adobe Acrobat Reader.
 * Put the signed file in `~/.pdf_signatures/`.
