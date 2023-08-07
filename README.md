@@ -5,6 +5,8 @@
 A tool to sign PDF files.
 We are here referring to the visible, non-cryptographic squiggles.
 
+![](README-example.gif)
+
 ## How
 
 First, create one or several signatures in the form of small PDF files with transparent backgrounds.
