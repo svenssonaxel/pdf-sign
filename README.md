@@ -2,7 +2,7 @@
 
 ## What
 
-A tool to sign PDF files.
+A tool to sign PDF files, with Linux support.
 We are here referring to the visible, non-cryptographic squiggles.
 
 ![](README-example.gif)
@@ -15,19 +15,23 @@ The recommended way is:
   If 3×2 inch suits you, you can use [empty-3inx2in.pdf](empty-3inx2in.pdf) directly.
 * Use an application of your choice to sign it.
   You can for example use Okular's Freehand Line, or transfer it to your smartphone and use Adobe Acrobat Reader.
+  Keep in mind that it's the center of this mini-page that will be used for positioning the signature.
 * Put the signed file in `~/.pdf_signatures/`.
 
 You can now use the `pdf-sign` tool interactively (or non-interactively) to sign PDF files.
 
 Run `pdf-sign -h` or `pdf-create-empty -h` for details.
 
-Installation:
+**Installation**
+
 * Install dependencies: `python3.7` or later with module `tkinter`, `gs` (Ghostscript), `pdftk` and `pdfinfo`.
 * Copy one or both tools to a directory in your `$PATH`.
 
-Installation on Debian:
+**Installation on Debian**
+
 ```sh
-apt-get update && apt-get install -y coreutils ghostscript git pdftk poppler-utils python3 python3-tk
+apt-get update
+apt-get install -y coreutils git python3 python3-tk ghostscript pdftk poppler-utils
 git clone https://github.com/svenssonaxel/pdf-sign.git
 cd pdf-sign
 cp pdf-sign pdf-create-empty /usr/local/bin/
@@ -39,7 +43,15 @@ There appears to be a lack of applications that run on Linux and allow for attac
 
 (Non-)alternatives include:
 
-* Okular: Allows for drawing 'Freehand Line' annotations, but not saving those for later use.
-  Allows for inserting custom saved stamps, but these will not be visible in other PDF readers.
-* Evince: Allows for certain kinds of annotations, but nothing that can serve as a signature.
-* pdftk, ghostscript, and other command-line tools: Allows for inserting stamps, but not interactively selecting where.
+* **Xournal and Xournal++:**
+  Allows free-hand annotations, but not saving those for later use.
+  Allows inserting images and .pdf files but will rasterize them rather than retain the vector graphics, resulting in lower quality.
+* **LibreOffice Draw:**
+  Allows inserting images and .pdf files but will rasterize them rather than retain the vector graphics, resulting in lower quality.
+* **Okular:**
+  Allows free-hand annotations, but not saving those for later use.
+  Allows inserting custom saved stamps, but these will not be visible in other PDF readers.
+* **Evince:**
+  Allows certain kinds of annotations, but nothing that can look like a free-hand signature.
+* **pdftk**, **ghostscript**, and other command-line tools:
+  Allows superimposing .pdf files, but not interactively selecting where.
