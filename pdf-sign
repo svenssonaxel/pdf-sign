@@ -7,8 +7,8 @@ import argparse, os, queue, re, subprocess, sys, tempfile, time
 # Inspired by https://unix.stackexchange.com/a/141496
 def main(args):
     filePath=args.input
-    if not m("^.*\.(pdf|PDF)$", filePath):
-        die("Input file must end with .pdf or .PDF")
+    if not isPdfFilename(filePath):
+        die("Input file must end with .pdf (case insensitive)")
     with tempfile.TemporaryDirectory() as tempdir:
         intmp=lambda fileName: os.path.join(tempdir, fileName)
         # Maybe flatten (make forms non-editable) before signing
@@ -34,9 +34,10 @@ def main(args):
         if not args.signature and args.batch:
             die('In batch mode, signature must be specified.')
         signatureDir=getSignatureDir()
-        signatures=[*filter(lambda x: m("^.*\.pdf$", x), os.listdir(signatureDir))] if not args.signature else [None]
+        signatures=[*filter(isPdfFilename, os.listdir(signatureDir))] if not args.signature else [None]
         if not signatures:
             die(f'No .pdf files found in {signatureDir}')
+        signatures.sort()
         signatureIndex=Cell(0)
         signaturePath=Cell(lambda: args.signature if args.signature else os.path.join(signatureDir, signatures[signatureIndex()]))
         signatureSize=Cell(lambda: pdfGetSize(signaturePath()))
@@ -138,7 +139,7 @@ def main(args):
             # Error handling
             tk.Tk.report_callback_exception = lambda self, exc, val, tb: die(val)
             # Window and menu
-            root = tk.Tk()
+            root = tk.Tk(className="pdf-sign")
             rootmenu = tk.Menu(root)
             root.config(menu=rootmenu)
             filemenu = tk.Menu(rootmenu, tearoff=0)
@@ -252,8 +253,7 @@ def main(args):
             root.mainloop()
         # End of GUI
         if doSign:
-            [ignored, pathPart1, pathPart2] = m("^(.*)(\.[Pp][Dd][Ff])$", filePath)
-            signedFilePath=args.output if args.output else f'{pathPart1}.signed{pathPart2}'
+            signedFilePath=args.output if args.output else f'{filePath[:-4]}.signed{filePath[-4:]}'
             if os.path.exists(signedFilePath):
                 if args.existing=='backup':
                     backupFilePath=f'{signedFilePath}.backup{time.strftime("%Y%m%d_%H%M%S")}'
@@ -368,6 +368,9 @@ def m(pattern, string):
     for index in range((match.lastindex or 0)+1):
         ret.append(match.group(index))
     return ret
+
+def isPdfFilename(filename):
+    return m(r"^.*\.[Pp][Dd][Ff]$", filename)
 
 def fromCmdOutput(cmd, pattern):
     sp=subprocess.run(cmd, check=True, capture_output=True)
