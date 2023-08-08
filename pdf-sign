@@ -2,7 +2,7 @@
 
 #Dependencies: python3.7 or later with module tkinter, gs (Ghostscript), pdftk and pdfinfo.
 
-import argparse, os, queue, re, subprocess, sys, tempfile, time
+import argparse, os, queue, re, subprocess, sys, tempfile, traceback, time
 
 # Inspired by https://unix.stackexchange.com/a/141496
 def main(args):
@@ -137,7 +137,10 @@ def main(args):
                 doSign=True
                 root.destroy()
             # Error handling
-            tk.Tk.report_callback_exception = lambda self, exc, val, tb: die(val)
+            def tkerror(self, exc, val, tb):
+                traceback.print_exception(exc, val, tb)
+                sys.exit(1)
+            tk.Tk.report_callback_exception = tkerror
             # Window and menu
             root = tk.Tk(className="pdf-sign")
             rootmenu = tk.Menu(root)
@@ -379,7 +382,7 @@ def fromCmdOutput(cmd, pattern):
 
 def die(reason):
     print(reason, file=sys.stderr)
-    sys.exit(2)
+    sys.exit(1)
 
 # Monkey-patch argparse if necessary
 if not 'BooleanOptionalAction' in dir(argparse):
