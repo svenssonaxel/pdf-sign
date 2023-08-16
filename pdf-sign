@@ -288,10 +288,10 @@ def main(args):
                     assert args.existing=='overwrite'
             pnr=pageNumber()
             qpdfOrPdftk([
-                'qpdf',
-                *(['--pages', '.', f'1-{pnr-1}', '--'] if 1 < pnr else []),
-                '--pages', signedPagePDF(), '1', '--',
-                *(['--pages', '.', f'{pnr+1}-z', '--'] if pnr < pageCount else []),
+                'qpdf', '--pages',
+                *(['.', f'1-{pnr-1}'] if 1 < pnr else []),
+                signedPagePDF(), '1',
+                *(['.', f'{pnr+1}-z'] if pnr < pageCount else []),
                 '--',
                 inputPDF(),
                 signedFilePath,
