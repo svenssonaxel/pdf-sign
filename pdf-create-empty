@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
-#Dependencies: python3, gs
+# Dependencies:
+# - python3.7 or later
+# - gs (Ghostscript)
 
 import argparse, os, re, subprocess, sys
 
