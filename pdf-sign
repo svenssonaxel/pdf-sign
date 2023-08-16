@@ -310,7 +310,7 @@ def main(args):
             print(f'Aborted')
 
 def has(cmd):
-    return subprocess.run(["which", cmd], check=False).returncode == 0
+    return subprocess.run(["which", cmd], check=False, capture_output=True).returncode == 0
 hasQpdf = has("qpdf")
 def qpdfOrPdftk(qpdfCmd, pdftkCmd):
     assert qpdfCmd[0] == "qpdf" and pdftkCmd[0] == "pdftk"
