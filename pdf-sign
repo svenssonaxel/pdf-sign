@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
 
-#Dependencies: python3.7 or later with module tkinter, gs (Ghostscript), pdftk and pdfinfo.
+# Dependencies:
+# - python3.7 or later with module tkinter
+# - gs (Ghostscript)
+# - qpdf or pdftk (pdf-sign will use pdftk if qpdf cannot be found)
+# - pdfinfo.
 
 import argparse, os, queue, re, subprocess, sys, tempfile, traceback, time
 
 # Inspired by https://unix.stackexchange.com/a/141496
 def main(args):
+    if not hasQpdf and not has("pdftk"):
+        die("Needs either qpdf or pdftk installed")
+    if not has("gs"):
+        die("Needs Ghostscript installed")
+    if not has("pdfinfo"):
+        die("Needs pdfinfo installed")
     filePath=args.input
     if not isPdfFilename(filePath):
         die("Input file must end with .pdf (case insensitive)")
@@ -14,11 +24,16 @@ def main(args):
         # Maybe flatten (make forms non-editable) before signing
         if args.flatten:
             inputPDF=str(intmp('input.pdf'))
-            subprocess.run([
+            qpdfOrPdftk([
+                'qpdf',
+                '--flatten-annotations=all',
+                '--generate-appearances',
+                filePath, inputPDF,
+            ],[
                 'pdftk', filePath,
                 'output', inputPDF,
                 'flatten'
-            ], check=True)
+            ])
         else:
             inputPDF=filePath
         # The chosen page
@@ -29,11 +44,13 @@ def main(args):
         @Cell
         def pagePDF():
             outFile=intmp('page.pdf')
-            subprocess.run([
+            qpdfOrPdftk([
+                'qpdf', '--pages', '.', f'{pageNumber()}', '--',
+                inputPDF, str(outFile)
+            ],[
                 'pdftk', inputPDF,
                 'cat', str(pageNumber()),
-                'output', str(outFile)
-            ], check=True)
+                'output', str(outFile)])
             return outFile
         pageSize=Cell(lambda: pdfGetSize(str(pagePDF())))
         # The chosen signature
@@ -71,11 +88,14 @@ def main(args):
         @Cell
         def signedPagePDF():
             outFile=intmp('signed-page.pdf')
-            subprocess.run([
+            qpdfOrPdftk([
+                'qpdf', '--overlay', str(signaturePositionedPDF()), '--',
+                str(pagePDF()), str(outFile),
+            ],[
                 'pdftk', str(pagePDF()),
                 'stamp', str(signaturePositionedPDF()),
                 'output', str(outFile)
-            ], check=True)
+            ])
             return outFile
         # The signed page as PNG, for GUI use
         displayMaxSize=Cell((400, 800))
@@ -283,7 +303,15 @@ def main(args):
                 else:
                     assert args.existing=='overwrite'
             pnr=pageNumber()
-            subprocess.run([
+            qpdfOrPdftk([
+                'qpdf', '--pages',
+                *(['.', f'1-{pnr-1}'] if 1 < pnr else []),
+                str(signedPagePDF()), '1',
+                *(['.', f'{pnr+1}-z'] if pnr < pageCount else []),
+                '--',
+                inputPDF,
+                signedFilePath,
+            ],[
                 'pdftk',
                 f'A={inputPDF}',
                 f'B={signedPagePDF()}',
@@ -292,7 +320,7 @@ def main(args):
                 'B',
                 *([f'A{pnr+1}-end'] if pnr < pageCount else []),
                 'output', signedFilePath,
-            ], check=True)
+            ])
             print(f'Signed document saved as {signedFilePath}')
         else:
             print(f'Aborted')
@@ -302,6 +330,15 @@ class Volatile():
     def __init__(self, underlying): self._underlying = underlying
     def __eq__(self, other): return self is other
     def __str__(self): return str(self._underlying)
+
+def has(cmd):
+    return subprocess.run(["which", cmd], check=False, capture_output=True).returncode == 0
+hasQpdf = has("qpdf")
+def qpdfOrPdftk(qpdfCmd, pdftkCmd):
+    assert qpdfCmd[0] == "qpdf" and pdftkCmd[0] == "pdftk"
+    cmd = qpdfCmd if hasQpdf else pdftkCmd
+    subprocess.run(cmd, check=True)
+    return True # Some lambdas above rely on this
 
 def getSignatureDir():
     if 'PDF_SIGNATURE_DIR' in os.environ:
