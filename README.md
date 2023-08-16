@@ -29,7 +29,7 @@ Run `pdf-sign -h` or `pdf-create-empty -h` for details.
   * `python3.7` or later
   * Python module `tkinter` (only needed for interactive use)
   * `gs` (Ghostscript)
-  * `pdftk`
+  * `qpdf` or `pdftk` (at least one of them)
   * `pdfinfo`
 * Copy one or both tools to a directory in your `$PATH`.
 
