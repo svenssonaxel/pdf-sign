@@ -50,7 +50,8 @@ There appears to be a lack of applications that run on Linux and allow for attac
   Allows inserting images and .pdf files but will rasterize them rather than retain the vector graphics, resulting in lower quality.
 * **Okular:**
   Allows free-hand annotations, but not saving those for later use.
-  Allows inserting custom saved stamps, but these will not be visible in other PDF readers.
+  Allows inserting custom saved stamps, but will rasterize them rather than retain the vector graphics, resulting in lower quality.
+  (Older versions of Okular might save the stamps in a way that isn't visible in other PDF readers.)
 * **Evince:**
   Allows certain kinds of annotations, but nothing that can look like a free-hand signature.
 * **pdftk**, **ghostscript**, and other command-line tools:
