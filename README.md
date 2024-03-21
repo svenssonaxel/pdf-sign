@@ -34,7 +34,7 @@ apt-get update
 apt-get install -y coreutils git python3 python3-tk ghostscript pdftk poppler-utils
 git clone https://github.com/svenssonaxel/pdf-sign.git
 cd pdf-sign
-cp pdf-sign pdf-create-empty /usr/local/bin/
+./pdf-create-empty /usr/local/bin/
 ```
 
 ## Why
