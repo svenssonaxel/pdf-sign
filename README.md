@@ -27,15 +27,26 @@ Run `pdf-sign -h` or `pdf-create-empty -h` for details.
 * Install dependencies: `python3.7` or later with module `tkinter`, `gs` (Ghostscript), `pdftk` and `pdfinfo`.
 * Copy one or both tools to a directory in your `$PATH`.
 
-**Installation on Debian**
+**Installation and usage on Debian**
 
 ```sh
 apt-get update
 apt-get install -y coreutils git python3 python3-tk ghostscript pdftk poppler-utils
 git clone https://github.com/svenssonaxel/pdf-sign.git
 cd pdf-sign
-./pdf-create-empty /usr/local/bin/
+# Get signatures folder
+./pdf-sign "" --print-path
+# Create this folder
+mkdir $(./pdf-sign "" --print-path)
 ```
+
+Now you'll have to put your signature in a PDF file in this folder, you can use `empty-3inx2in.pdf` empty PDF template for example.
+
+```
+./pdf-sign my_document.pdf
+```
+
+This will generate a second file with `my_document.signed.pdf` in the same directory.
 
 ## Why
 

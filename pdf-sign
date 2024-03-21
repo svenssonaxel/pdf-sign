@@ -6,6 +6,9 @@ import argparse, os, queue, re, subprocess, sys, tempfile, time
 
 # Inspired by https://unix.stackexchange.com/a/141496
 def main(args):
+    if args.print_path:
+        print(getSignatureDir())
+        sys.exit()
     filePath=args.input
     if not m("^.*\.(pdf|PDF)$", filePath):
         die("Input file must end with .pdf or .PDF")
@@ -34,6 +37,7 @@ def main(args):
         if not args.signature and args.batch:
             die('In batch mode, signature must be specified.')
         signatureDir=getSignatureDir()
+        checkSignatureDir(signatureDir)
         signatures=[*filter(lambda x: m("^.*\.pdf$", x), os.listdir(signatureDir))] if not args.signature else [None]
         if not signatures:
             die(f'No .pdf files found in {signatureDir}')
@@ -292,11 +296,13 @@ def getSignatureDir():
     else:
         sd="~/.pdf_signatures"
     sd=os.path.expanduser(sd)
-    if not os.path.exists(sd):
-        raise Exception(f'Signature directory {sd} does not exist')
-    if not os.path.isdir(sd):
-        raise Exception(f'Signature directory {sd} is not a directory')
     return sd
+
+def checkSignatureDir(signatureDir):
+    if not os.path.exists(signatureDir):
+        raise Exception(f'Signature directory {signatureDir} does not exist')
+    if not os.path.isdir(signatureDir):
+        raise Exception(f'Signature directory {signatureDir} is not a directory')
 
 # Simple dependency tracking.
 # Init with a value or function to calculate the value.
@@ -402,6 +408,7 @@ parser = argparse.ArgumentParser(description='Sign a PDF file.')
 parser.add_argument('input', metavar='input.pdf', type=str, help='Input PDF file.')
 parser.add_argument('-p', '--page', type=int, default=-1, help='The page to sign, negative for counting from the end. (default: -1)')
 parser.add_argument('-s', '--signature', type=str, help='Path to file used as signature. Required in batch mode. In GUI mode, the user can choose among files in $PDF_SIGNATURE_DIR, $XDG_CONFIG_HOME/pdf_signatures (defaulting to ~/.config/pdf_signatures), or ~/.pdf_signatures.')
+parser.add_argument('-S', '--print-path', help='Print signatures path.', action='store_true')
 parser.add_argument('-x', '--x-coordinate', type=float, default=0.5, help='Horizontal coordinate of signature center, in page width units. (default: 0.5)')
 parser.add_argument('-y', '--y-coordinate', type=float, default=0.75, help='Vertical coordinate of signature center, in page height units. (default: 0.75)')
 parser.add_argument('-W', '--width', type=float, default=0.28, help='Width of box to fit signature to, in page width units. (default: 0.28)')
