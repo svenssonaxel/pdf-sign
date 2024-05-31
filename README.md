@@ -29,7 +29,7 @@ The GUI is self documented and allows both keyboard-only and pointer-only operat
 
 Run `pdf-sign -h`, `pdf-create-empty -h` or `pdf-from-text -h` for details.
 
-**Installation**
+### Installation
 
 * Install dependencies
   * `python3.7` or later
@@ -40,7 +40,7 @@ Run `pdf-sign -h`, `pdf-create-empty -h` or `pdf-from-text -h` for details.
   * `which`
 * Copy the tools to a directory in your `$PATH`.
 
-**Installation on Debian**
+#### Debian
 
 ```sh
 apt-get update
@@ -48,6 +48,29 @@ apt-get install -y coreutils git python3 python3-tk ghostscript pdftk poppler-ut
 git clone https://github.com/svenssonaxel/pdf-sign.git
 cd pdf-sign
 cp pdf-* /usr/local/bin/
+```
+
+#### Nix
+
+`pdf-sign` has a nix flake that you can use directly from your cmd-line like so:
+
+```
+# Use flake in master branch
+pdf_sign='nix run github:svenssonaxel/pdf-sign --'
+pdf_create_empty='nix run github:svenssonaxel/pdf-sign#pdf-create-empty --'
+pdf_from_text='nix run github:svenssonaxel/pdf-sign#pdf-from-text --'
+
+# Example use
+$pdf_sign --help
+$pdf_create_empty --help
+$pdf_from_text --help
+```
+
+You can also use it as published in `nixpkgs`:
+
+```
+pdf_sign='nix run nixpkgs#pdf-sign --'
+$pdf_sign --help
 ```
 
 ### Related use cases
