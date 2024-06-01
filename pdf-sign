@@ -10,26 +10,32 @@ def main(args):
     if not isPdfFilename(filePath):
         die("Input file must end with .pdf (case insensitive)")
     with tempfile.TemporaryDirectory() as tempdir:
-        intmp=lambda fileName: os.path.join(tempdir, fileName)
+        intmp=lambda fileName: Volatile(os.path.join(tempdir, fileName))
         # Maybe flatten (make forms non-editable) before signing
-        @Cell
-        def inputPDF():
-            if args.flatten:
-                outFile=intmp('input.pdf')
-                subprocess.run([
-                    'pdftk', filePath,
-                    'output', outFile,
-                    'flatten'
-                ], check=True)
-                return outFile
-            return filePath
+        if args.flatten:
+            inputPDF=str(intmp('input.pdf'))
+            subprocess.run([
+                'pdftk', filePath,
+                'output', inputPDF,
+                'flatten'
+            ], check=True)
+        else:
+            inputPDF=filePath
         # The chosen page
-        pageCount=pdfCountPages(inputPDF())
+        pageCount=pdfCountPages(inputPDF)
         if args.page < -pageCount or args.page==0 or pageCount < args.page:
             die('Page number out of range')
         pageNumber=Cell(args.page if 0 < args.page else pageCount+args.page+1)
-        pagePDF=Cell(lambda: subprocess.run(['pdftk', inputPDF(), 'cat', str(pageNumber()), 'output', intmp('page.pdf')], check=True) and intmp('page.pdf'))
-        pageSize=Cell(lambda: pdfGetSize(pagePDF()))
+        @Cell
+        def pagePDF():
+            outFile=intmp('page.pdf')
+            subprocess.run([
+                'pdftk', inputPDF,
+                'cat', str(pageNumber()),
+                'output', str(outFile)
+            ], check=True)
+            return outFile
+        pageSize=Cell(lambda: pdfGetSize(str(pagePDF())))
         # The chosen signature
         if not args.signature and args.batch:
             die('In batch mode, signature must be specified.')
@@ -62,12 +68,15 @@ def main(args):
             ], check=True)
             return outFile
         # The signed page
-        signedPagePDF=Cell(lambda: subprocess.run([
-            'pdftk',
-            pagePDF(),
-            'stamp', signaturePositionedPDF(),
-            'output', intmp('signed-page.pdf'),
-        ], check=True) and intmp('signed-page.pdf'))
+        @Cell
+        def signedPagePDF():
+            outFile=intmp('signed-page.pdf')
+            subprocess.run([
+                'pdftk', str(pagePDF()),
+                'stamp', str(signaturePositionedPDF()),
+                'output', str(outFile)
+            ], check=True)
+            return outFile
         # The signed page as PNG, for GUI use
         displayMaxSize=Cell((400, 800))
         @Cell
@@ -86,7 +95,7 @@ def main(args):
                 '-sDEVICE=pngalpha',
                 '-dMaxBitmap=2147483647',
                 f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}', '-dFIXEDMEDIA', '-dPDFFitPage',
-                '-f', signedPagePDF(),
+                '-f', str(signedPagePDF()),
             ], check=True)
             return outFile
         # GUI
@@ -240,7 +249,7 @@ def main(args):
             @tkthrottle(100, root)
             def update():
                 (w, h) = displaySize()
-                root._docImg = tk.PhotoImage(file=displayPNG())
+                root._docImg = tk.PhotoImage(file=str(displayPNG()))
                 root._docView.itemconfig(root._docViewIndex, image=root._docImg)
                 root._docView.configure(width=w, height=h)
                 updateTitle()
@@ -276,7 +285,7 @@ def main(args):
             pnr=pageNumber()
             subprocess.run([
                 'pdftk',
-                f'A={inputPDF()}',
+                f'A={inputPDF}',
                 f'B={signedPagePDF()}',
                 'cat',
                 *([f'A1-{pnr-1}'] if 1 < pnr else []),
@@ -287,6 +296,12 @@ def main(args):
             print(f'Signed document saved as {signedFilePath}')
         else:
             print(f'Aborted')
+
+# Used for file names that don't change but represents changed content
+class Volatile():
+    def __init__(self, underlying): self._underlying = underlying
+    def __eq__(self, other): return self is other
+    def __str__(self): return str(self._underlying)
 
 def getSignatureDir():
     if 'PDF_SIGNATURE_DIR' in os.environ:
@@ -308,33 +323,54 @@ def getSignatureDir():
 # Init with a value or function to calculate the value.
 # Update by calling with one argument (as in init).
 # To retrieve an up-to-date value, call with no arguments.
+# Calculations with unchanged inputs are skipped.
 class Cell():
     currentCell=None
     def __init__(self, arg):
         self._arg=arg
         self._isuptodate=False
+        self._needEval=True
         self._dependents=[]
+        self._precedents=[]
+        self._precedentvalues=[]
     def __call__(self, *args):
         if(len(args)==1):
-            self._arg=args[0]
-            self.dirty()
+            if self._arg != args[0]:
+                self._arg=args[0]
+                self._needEval=True
+                self._dirty()
             return
         assert len(args)==0
-        if(Cell.currentCell):
-            self._dependents.append(Cell.currentCell)
         if not self._isuptodate:
             oldcell=Cell.currentCell
-            Cell.currentCell=self
-            self._value=self._arg() if callable(self._arg) else self._arg
+            Cell.currentCell=None
+            for i in range(len(self._precedents)):
+                p=self._precedents[i]
+                oldval=self._precedentvalues[i]
+                newval=p()
+                if oldval!=newval:
+                    self._needEval=True
+                    break
+            if self._needEval:
+                Cell.currentCell=self
+                for p in self._precedents:
+                    p._dependents.remove(self)
+                self._precedents=[]
+                self._precedentvalues=[]
+                self._value=self._arg() if callable(self._arg) else self._arg
+                self._needEval=False
             self._isuptodate=True
             Cell.currentCell=oldcell
+        if(Cell.currentCell):
+            self._dependents.append(Cell.currentCell)
+            Cell.currentCell._precedents.append(self)
+            Cell.currentCell._precedentvalues.append(self._value)
         return self._value
-    def dirty(self):
+    def _dirty(self):
         if self._isuptodate:
             self._isuptodate=False
             for d in self._dependents:
-                d.dirty()
-            self._dependents=[]
+                d._dirty()
 
 def tkthrottle(frequency, root):
     wait=1/frequency
@@ -358,7 +394,7 @@ def tkthrottle(frequency, root):
     return decorator
 
 def pdfCountPages(filePath):
-    return int(fromCmdOutput(["pdfinfo", filePath], "^.*\nPages: +([0-9]+)\n.*$")[1])
+    return int(fromCmdOutput(["pdfinfo", str(filePath)], "^.*\nPages: +([0-9]+)\n.*$")[1])
 
 def pdfGetSize(filePath):
     [ignored, w, h, *ignored2]=fromCmdOutput(['pdfinfo', filePath], '^.*\nPage size: +([0-9.]+) x ([0-9.]+) pts( \([A-Za-z0-9]+\))?\n.*$')
