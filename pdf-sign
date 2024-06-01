@@ -74,8 +74,8 @@ def main(args):
         def displaySize():
             (maxWidth, maxHeight)=displayMaxSize()
             (pageWidth, pageHeight)=pageSize()
-            scale=min(maxWidth/pageWidth, maxHeight/pageWidth)
-            return (int(pageWidth*scale), int(pageHeight*scale))
+            scale=min(maxWidth/pageWidth, maxHeight/pageHeight)
+            return (round(pageWidth*scale), round(pageHeight*scale))
         @Cell
         def displayPNG():
             (w, h)=displaySize()
@@ -218,19 +218,22 @@ def main(args):
                 (oldMaxWidth, oldMaxHeight)=displayMaxSize()
                 if(0<canvasMarginX and 0<canvasMarginY):
                     apparentScale=max(canvasHeight/oldMaxHeight, canvasWidth/oldMaxWidth, 0.5)
-                    newMaxWidth=int((canvasWidth+2*canvasMarginX)/apparentScale-10)
-                    newMaxHeight=int((canvasHeight+2*canvasMarginY)/apparentScale-10)
-                    if(5<abs(oldMaxWidth-newMaxWidth) or 5<abs(oldMaxHeight-newMaxHeight)):
-                        displayMaxSize((newMaxWidth, newMaxHeight))
-                        update()
+                    newMaxWidth=(canvasWidth+2*canvasMarginX)/apparentScale-10
+                    newMaxHeight=(canvasHeight+2*canvasMarginY)/apparentScale-10
                 else:
-                    newMaxWidth=max(int(oldMaxWidth/2), 10)
-                    newMaxHeight=max(int(oldMaxHeight/2), 10)
+                    newMaxWidth=oldMaxWidth/2
+                    newMaxHeight=oldMaxHeight/2
+                newMaxWidth=max(newMaxWidth, 10)
+                newMaxHeight=max(newMaxHeight, 10)
+                if abs(oldMaxWidth-newMaxWidth) < 5: newMaxWidth=oldMaxWidth
+                if abs(oldMaxHeight-newMaxHeight) < 5: newMaxHeight=oldMaxHeight
+                if oldMaxWidth != newMaxWidth or oldMaxHeight != newMaxHeight:
                     displayMaxSize((newMaxWidth, newMaxHeight))
                     update()
-            root._docView.bind('<Configure>', onDocViewResize)
             root._docView.pack(expand=1)
             root._docViewIndex=root._docView.create_image(0, 0, anchor=tk.NW)
+            root._docView.bind('<Configure>', onDocViewResize)
+            root.geometry("800x600")
             @Cell
             def updateTitle():
                 root.title(f'Signing page {pageNumber()}/{pageCount} of {filePath}')
