@@ -16,7 +16,8 @@ The recommended way is:
 * Use an application of your choice to sign it.
   You can for example use Okular's Freehand Line, or transfer it to your smartphone and use Adobe Acrobat Reader.
   Keep in mind that it's the center of this mini-page that will be used for positioning the signature.
-* Put the signed file in `~/.pdf_signatures/`.
+* Put the signed file in your signature directory.
+  The signature directory is `$PDF_SIGNATURE_DIR`, `$XDG_CONFIG_HOME/pdf_signatures`, `$HOME/.config/pdf_signatures` or `$HOME/.pdf_signatures/`; the first one that exists. Use `pdf-sign -h` to confirm which one will be used on your system.
 
 You can now use the `pdf-sign` tool interactively (or non-interactively) to sign PDF files.
 The GUI is self documented and allows both keyboard-only and pointer-only operation.

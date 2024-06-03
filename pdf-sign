@@ -397,20 +397,44 @@ def qpdfOrPdftk(qpdfCmd, pdftkCmd):
     return True # Some lambdas above rely on this
 
 def getSignatureDir():
-    if 'PDF_SIGNATURE_DIR' in os.environ:
-        sd=os.environ['PDF_SIGNATURE_DIR']
-    elif 'XDG_CONFIG_HOME' in os.environ:
-        sd=os.path.join(os.environ['XDG_CONFIG_HOME'], 'pdf_signatures')
-    elif os.path.exists(os.path.expanduser("~/.config/pdf_signatures")):
-        sd="~/.config/pdf_signatures"
-    else:
-        sd="~/.pdf_signatures"
-    sd=os.path.expanduser(sd)
-    if not os.path.exists(sd):
-        raise Exception(f'Signature directory {sd} does not exist')
-    if not os.path.isdir(sd):
-        raise Exception(f'Signature directory {sd} is not a directory')
-    return sd
+    (path, helptxt) = getSignatureDirAndHelp()
+    if not path:
+        die(f"Could not find a valid signature directory. The options considered are: {helptxt}")
+    return path
+
+def getSignatureDirAndHelp():
+    def candidate(prevpath, prevhelptxt, nr, lbl, envvar, path):
+        helptxt = f"{nr}) {lbl}"
+        if prevhelptxt: helptxt = f"{prevhelptxt} {helptxt}"
+        if envvar and not envvar in os.environ:
+            helptxt += " which is not used since the environment variable is not set."
+            return (prevpath, helptxt)
+        path = os.path.expanduser(path)
+        if not os.path.exists(path):
+            helptxt += f" which is not used since {path} does not exist."
+            return (prevpath, helptxt)
+        if not os.path.isdir(path):
+            helptxt += f" which is not used since {path} is not a directory."
+            return (prevpath, helptxt)
+        if prevpath:
+            helptxt += f" which is valid, but not used since it's not the highest priority directory."
+            return (prevpath, helptxt)
+        helptxt += f" which resolves to {path} and IS USED as the signature directory."
+        return (path, helptxt)
+    (path, helptxt) = (None, None)
+    (path, helptxt) = candidate(path, helptxt,
+        1, '$PDF_SIGNATURE_DIR', 'PDF_SIGNATURE_DIR',
+        os.environ.get('PDF_SIGNATURE_DIR'))
+    (path, helptxt) = candidate(path, helptxt,
+        2, '$XDG_CONFIG_HOME/pdf_signatures', 'XDG_CONFIG_HOME',
+        os.path.join(os.environ.get('XDG_CONFIG_HOME') or '/', 'pdf_signatures'))
+    (path, helptxt) = candidate(path, helptxt,
+        3, '~/.config/pdf_signatures', None,
+        '~/.config/pdf_signatures')
+    (path, helptxt) = candidate(path, helptxt,
+        4, '~/.pdf_signatures', None,
+        '~/.pdf_signatures')
+    return (path, helptxt)
 
 # Simple dependency tracking.
 # Init with a value or function to calculate the value.
@@ -536,10 +560,24 @@ if not 'BooleanOptionalAction' in dir(argparse):
             return ' | '.join(self.option_strings)
     argparse.BooleanOptionalAction = BooleanOptionalAction
 
-parser = argparse.ArgumentParser(description='Sign a PDF file.')
+
+def getSignatureHelp():
+    (path, helptxt) = getSignatureDirAndHelp()
+    ret="""
+        Path to file used as signature.
+        Required in batch mode.
+        In GUI mode, the user can choose among PDF files in the signature directory.
+    """
+    if path:
+        ret += f"The signature directory is {path}, chosen from these options: {helptxt}"
+    else:
+        ret += f"Right now, no signature directory could be found. The options are: {helptxt}"
+    return ret
+
+parser = argparse.ArgumentParser(description='Sign a PDF file, with a non-cryptographic squiggle.')
 parser.add_argument('input', metavar='input.pdf', type=str, help='Input PDF file.')
 parser.add_argument('-p', '--page', type=int, default=-1, help='The page to sign, negative for counting from the end. (default: -1)')
-parser.add_argument('-s', '--signature', type=str, help='Path to file used as signature. Required in batch mode. In GUI mode, the user can choose among files in $PDF_SIGNATURE_DIR, $XDG_CONFIG_HOME/pdf_signatures (defaulting to ~/.config/pdf_signatures), or ~/.pdf_signatures.')
+parser.add_argument('-s', '--signature', type=str, help=getSignatureHelp())
 parser.add_argument('-x', '--x-coordinate', type=float, default=0.5, help='Horizontal coordinate of signature center, in page width units. (default: 0.5)')
 parser.add_argument('-y', '--y-coordinate', type=float, default=0.75, help='Vertical coordinate of signature center, in page height units. (default: 0.75)')
 parser.add_argument('-W', '--width', type=float, default=0.28, help='Width of box to fit signature to, in page width units. (default: 0.28)')
