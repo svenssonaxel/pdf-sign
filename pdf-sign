@@ -19,6 +19,9 @@ def main(args):
     filePath=args.input
     if not isPdfFilename(filePath):
         die("Input file must end with .pdf (case insensitive)")
+    if filePath.startswith('-'):
+        # A cheap solution to a rare problem
+        die("Input file may not start with a dash (-)")
     with tempfile.TemporaryDirectory() as tempdir:
         intmp=lambda fileName: Volatile(os.path.join(tempdir, fileName))
         # Maybe flatten (make forms non-editable) before signing
