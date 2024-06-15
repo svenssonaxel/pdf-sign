@@ -671,10 +671,10 @@ def tkthrottle(frequency, root):
     return decorator
 
 def pdfCountPages(filePath):
-    return int(fromCmdOutput(["pdfinfo", filePath], "^.*\nPages: +([0-9]+)\n.*$")[1])
+    return int(fromCmdOutput(["pdfinfo", filePath], r"^.*\nPages: +([0-9]+)\n.*$")[1])
 
 def pdfGetSize(filePath):
-    [ignored, w, h, *ignored2]=fromCmdOutput(['pdfinfo', filePath], '^.*\nPage size: +([0-9.]+) x ([0-9.]+) pts( \([A-Za-z0-9]+\))?\n.*$')
+    [ignored, w, h, *ignored2]=fromCmdOutput(['pdfinfo', filePath], r'^.*\nPage size: +([0-9.]+) x ([0-9.]+) pts( \([A-Za-z0-9]+\))?\n.*$')
     return (float(w), float(h))
 
 def m(pattern, string):
