@@ -489,8 +489,8 @@ parser.add_argument('-y', '--y-coordinate', type=float, default=0.75, help='Vert
 parser.add_argument('-W', '--width', type=float, default=0.28, help='Width of box to fit signature to, in page width units. (default: 0.28)')
 parser.add_argument('-H', '--height', type=float, default=0.28, help='Height of box to fit signature to, in page height units. (default: 0.28)')
 parser.add_argument('-o', '--output', type=str, help='Output file. (default: Add ".signed" before the extension)')
-parser.add_argument('-b', '--batch', action=argparse.BooleanOptionalAction, default=False, help='Batch mode: do not show GUI.')
-parser.add_argument('-f', '--flatten', action=argparse.BooleanOptionalAction, default=True, help='Flatten before signing.')
+parser.add_argument('-b', '--batch', action=argparse.BooleanOptionalAction, default=False, help='Batch mode: do not show GUI. (default: False)')
+parser.add_argument('-f', '--flatten', action=argparse.BooleanOptionalAction, default=True, help='Flatten before signing, preventing subsequent changes in PDF forms. (default: True)')
 parser.add_argument('-e', '--existing', type=str, choices=['backup', 'overwrite', 'fail'], default='backup', help='What to do if output file exists. (default: backup)')
 
 main(parser.parse_args(sys.argv[1:] or ['-h']))
