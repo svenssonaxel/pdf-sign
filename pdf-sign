@@ -238,30 +238,20 @@ def main(args):
                 root.bind(f'{char}', onkey)
             for i, char in enumerate("123456789"): bindDigit(i, char)
             # Canvas and click binding
-            root._docView=tk.Canvas(root, borderwidth=0, background='#ffffff', confine=True)
-            def onDocViewResize(event):
-                canvasMarginX=event.x
-                canvasMarginY=event.y
-                canvasWidth=event.width
-                canvasHeight=event.height
-                (oldMaxWidth, oldMaxHeight)=displayMaxSize()
-                if(0<canvasMarginX and 0<canvasMarginY):
-                    apparentScale=max(canvasHeight/oldMaxHeight, canvasWidth/oldMaxWidth, 0.5)
-                    newMaxWidth=(canvasWidth+2*canvasMarginX)/apparentScale-10
-                    newMaxHeight=(canvasHeight+2*canvasMarginY)/apparentScale-10
-                else:
-                    newMaxWidth=oldMaxWidth/2
-                    newMaxHeight=oldMaxHeight/2
-                newMaxWidth=max(newMaxWidth, 10)
-                newMaxHeight=max(newMaxHeight, 10)
-                if abs(oldMaxWidth-newMaxWidth) < 5: newMaxWidth=oldMaxWidth
-                if abs(oldMaxHeight-newMaxHeight) < 5: newMaxHeight=oldMaxHeight
-                if oldMaxWidth != newMaxWidth or oldMaxHeight != newMaxHeight:
-                    displayMaxSize((newMaxWidth, newMaxHeight))
+            root._docView=tk.Canvas(root, borderwidth=0, background='#ffffff')
+            docViewMargin=5
+            docViewMinDimension=50
+            def onRootResize(event):
+                rootWidth=root.winfo_width()
+                rootHeight=root.winfo_height()
+                newMaxDisplayDimensions=(max(rootWidth - 2 * docViewMargin, docViewMinDimension),
+                                         max(rootHeight - 2 * docViewMargin, docViewMinDimension))
+                if displayMaxSize() != newMaxDisplayDimensions:
+                    displayMaxSize(newMaxDisplayDimensions)
                     update()
-            root._docView.pack(expand=1)
+            root._docView.place(x=docViewMargin, y=docViewMargin)
             root._docViewIndex=root._docView.create_image(0, 0, anchor=tk.NW)
-            root._docView.bind('<Configure>', onDocViewResize)
+            root.bind('<Configure>', onRootResize)
             root.geometry("800x600")
             @Cell
             def updateTitle():
