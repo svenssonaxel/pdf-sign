@@ -45,7 +45,7 @@ def main(args):
         def pagePDF():
             outFile=intmp('page.pdf')
             qpdfOrPdftk([
-                'qpdf', '--pages', '.', f'1-{pageNumber()}', '--',
+                'qpdf', '--pages', '.', f'{pageNumber()}', '--',
                 inputPDF, str(outFile)
             ],[
                 'pdftk', inputPDF,
