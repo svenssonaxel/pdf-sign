@@ -228,6 +228,7 @@ def main(args):
                 'space': cmd_sign,
             }
             def onkey(event):
+                print(f"Debug: in onkey(event): char={event.char}, delta={event.delta}, height={event.height}, keycode={event.keycode}, keysym={event.keysym}, keysym_num={event.keysym_num}, num={event.num}, send_event={event.send_event}, serial={event.serial}, state={event.state}, time={event.time}, type={event.type}, widget={event.widget}, width={event.width}, x={event.x}, x_root={event.x_root}, y={event.y}, y_root={event.y_root}")
                 key=('C-' if event.state in [4, 5] else '')+event.keysym
                 if key in keyToFunction:
                     keyToFunction[key]()
@@ -266,7 +267,18 @@ def main(args):
                 if not args.signature:
                     if root.signatureControlVar.get() != signatureIndex():
                         root.signatureControlVar.set(signatureIndex())
+            def dbg(event, x):
+                print(f"Debug: in dbg(event) for {x}: char={event.char}, delta={event.delta}, height={event.height}, keycode={event.keycode}, keysym={event.keysym}, keysym_num={event.keysym_num}, num={event.num}, send_event={event.send_event}, serial={event.serial}, state={event.state}, time={event.time}, type={event.type}, widget={event.widget}, width={event.width}, x={event.x}, x_root={event.x_root}, y={event.y}, y_root={event.y_root}")
+            def dbgfun(x):
+                def fun(event):
+                    dbg(event, x)
+                return fun
+            root._docView.bind('<KeyPress>', dbgfun("root._docView <KeyPress>"))
+            root._docView.bind('<Button>', dbgfun("root._docView <Button>"))
+            root.bind('<KeyPress>', dbgfun("root <KeyPress>"))
+            root.bind('<Button>', dbgfun("root <Button>"))
             def onclick(event):
+                print(f"Debug: in onclick(event): char={event.char}, delta={event.delta}, height={event.height}, keycode={event.keycode}, keysym={event.keysym}, keysym_num={event.keysym_num}, num={event.num}, send_event={event.send_event}, serial={event.serial}, state={event.state}, time={event.time}, type={event.type}, widget={event.widget}, width={event.width}, x={event.x}, x_root={event.x_root}, y={event.y}, y_root={event.y_root}")
                 x=event.x
                 y=event.y
                 canvasConfig=root._docView.config()
