@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+
+#Dependencies: python3.7 or later and gs (Ghostscript)
+
+import argparse, os, re, subprocess, sys, tempfile
+
+def main():
+    parser = argparse.ArgumentParser(description="Create a correctly cropped PDF from one line of text. Only Latin-1 character set is supported.")
+    parser.add_argument("-t", "--text", required=True, help="Text to be converted to PDF.")
+    parser.add_argument("-o", "--output", required=True, help="Output PDF file.")
+    parser.add_argument("-s", "--size", type=int, default=12, help="Font size in points (default 12).")
+    parser.add_argument("-m", "--margin", type=int, default=1, help="Margin in points (default 1).")
+    args = parser.parse_args()
+    text_to_pdf(args.text, args.output, args.size, args.margin)
+
+# Keep this function in sync with pdf-sign
+def text_to_pdf(text, output, size, margin):
+    # Validate text
+    text_chars=set(map(ord, text))
+    latin1_chars=set([*range(0x20, 0x7f), *range(0xa0, 0x100)])
+    if not text_chars.issubset(latin1_chars):
+        die(f"Error: Only non-control latin-1 characters are supported. Unsupported characters: {', '.join(map(hex, text_chars - latin1_chars))}")
+    text.encode('latin-1').decode('latin-1') # Assertion. E.i., an exception here indicates a bug.
+    with tempfile.TemporaryDirectory() as tempdir:
+        # Write postscript file
+        ps_file=os.path.join(tempdir, "file.ps")
+        text_len=len(text)
+        w=text_len * size + margin * 2
+        h=size * 3 + margin * 2
+        x=size + margin
+        y=size + margin
+        ps_text = (text
+                   .replace("\\", "\\\\")
+                   .replace("(", "\\(")
+                   .replace(")", "\\)")
+                   )
+        def write_ps():
+            with open(ps_file, "w", encoding="latin-1") as f:
+                f.write('\n'.join([
+                    "%!PS-Adobe-3.0",
+                    f"%%BoundingBox: 0 0 {w} {h}",
+                    "%%Pages: 1",
+                    "%%EndComments",
+                    "%%Page: 1 1",
+                    f"/DejaVuSansMono findfont {size} scalefont setfont",
+                    f"{x} {y} moveto",
+                    f"({ps_text}) show",
+                    "showpage"]))
+        # Write postscript file with too big bounding box
+        write_ps()
+        # Get correct bounding box
+        bbox_result = subprocess.run([
+            "gs", '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+            "-sDEVICE=bbox",
+            ps_file
+        ], stderr=subprocess.PIPE, text=True, check=True)
+        bbox = m(r'.*%%HiResBoundingBox: (\d+(\.\d+)?) (\d+(\.\d+)?) (\d+(\.\d+)?) (\d+(\.\d+)?)\n.*', bbox_result.stderr)
+        if not bbox:
+            die("Error: Unable to extract bounding box.")
+        # Adjust variables for bounding box
+        llx, lly, urx, ury = float(bbox[1]), float(bbox[3]), float(bbox[5]), float(bbox[7])
+        llx, lly, urx, ury = llx - margin, lly - margin, urx + margin, ury + margin
+        w=urx - llx
+        h=ury - lly
+        x-=llx
+        y-=lly
+        # Write postscript file with correct bounding box
+        write_ps()
+        # Convert to PDF
+        gs_cmd = [
+            "gs", '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+            "-o", output,
+            "-sDEVICE=pdfwrite",
+            f"-dDEVICEWIDTHPOINTS={w}",
+            f"-dDEVICEHEIGHTPOINTS={h}",
+            "-dFIXEDMEDIA",
+            "-c", "[ /PAGES pdfmark",
+            "-f", ps_file
+        ]
+        subprocess.run(gs_cmd, check=True, stdout=subprocess.DEVNULL)
+
+def m(pattern, string):
+    match = re.match(pattern, string, re.DOTALL)
+    if not match:
+        return None
+    if(match.group(0) != string):
+        die(f'Pattern /${pattern}/ matched only part of string')
+    ret = []
+    for index in range((match.lastindex or 0)+1):
+        ret.append(match.group(index))
+    return ret
+
+def die(reason):
+    print(reason, file=sys.stderr)
+    sys.exit(2)
+
+if __name__ == "__main__":
+    main()

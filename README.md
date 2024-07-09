@@ -22,7 +22,7 @@ The recommended way is:
 You can now use the `pdf-sign` tool interactively (or non-interactively) to sign PDF files.
 The GUI is self documented and allows both keyboard-only and pointer-only operation.
 
-Run `pdf-sign -h` or `pdf-create-empty -h` for details.
+Run `pdf-sign -h`, `pdf-create-empty -h` or `pdf-from-text -h` for details.
 
 **Installation**
 
@@ -41,8 +41,18 @@ apt-get update
 apt-get install -y coreutils git python3 python3-tk ghostscript pdftk poppler-utils
 git clone https://github.com/svenssonaxel/pdf-sign.git
 cd pdf-sign
-cp pdf-sign pdf-create-empty /usr/local/bin/
+cp pdf-sign pdf-create-empty pdf-from-text /usr/local/bin/
 ```
+
+### Related use cases
+
+* You can add the date or other pieces of text using the `--text` CLI option or `Signature -> Custom text` menu option.
+* You can convert SVG stamps/marks and add them to your signature directory. Example:
+  ```
+  curl -LO https://www.svgrepo.com/download/438371/checkmark-round.svg
+  sudo apt-get install librsvg2-bin
+  rsvg-convert -f pdf -o ~/.pdf_signatures/check.pdf checkmark-round.svg
+  ```
 
 ## Why
 
