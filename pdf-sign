@@ -183,6 +183,8 @@ def main(args):
                     signatureIndex(i)
                     update()
             def cmd_customText():
+                if args.signature:
+                    return
                 # Get text from user
                 text = simpledialog.askstring(
                     "Custom Text",
