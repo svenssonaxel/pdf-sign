@@ -64,6 +64,8 @@ def main(args):
                 die('In batch mode, --text must be given only once.')
         if args.signature and args.text:
             die('--signature and --text cannot be specified together.')
+        if args.signature and not os.path.exists(args.signature):
+            die(f'File not found: {args.signature}')
         if args.text:
             assert(len(args.text) > 0)
             latin1_chars=set([*range(0x20, 0x7f), *range(0xa0, 0x100)])
