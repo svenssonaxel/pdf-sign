@@ -259,8 +259,25 @@ def main(args):
             @Cell
             def updateTitle():
                 root.title(f'Signing page {pageNumber()}/{pageCount} of {filePath}')
+            # The update function triggers heavy PDF file operations, so we try
+            # to avoid calling it too much. In particular,
+            # 1) Depending on desktop environment and window manager, one or
+            #    more resizes can happen soon after startup, triggering an
+            #    update. We use the updateActive flag to avoid these, then
+            #    instead update once 100 ms after startup.
+            # 2) An interactive resizing process using the pointer can produce a
+            #    lot of resizing events. We use the @tkthrottle decorator to
+            #    reduce them.
+            updateActive = False
+            def soonAfterStart():
+                nonlocal updateActive
+                updateActive = True
+                update()
+            root.after(100, soonAfterStart)
             @tkthrottle(100, root)
             def update():
+                if not updateActive:
+                    return
                 (w, h) = displaySize()
                 root._docImg = tk.PhotoImage(file=str(displayPNG()))
                 root._docView.itemconfig(root._docViewIndex, image=root._docImg)
