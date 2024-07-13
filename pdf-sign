@@ -390,7 +390,9 @@ class Cell():
                 print(f"Debug: Called cell {self._dbgname}{repr(args)}, not changing value.")
             return
         assert len(args)==0
-        dbgtext=f"Debug: Called cell {self._dbgname}{repr(args)}"
+        print(f"{Cell._dbgprefix}Debug: Called cell {self._dbgname}{repr(args)}...")
+        dbgtext=f"{Cell._dbgprefix}.."
+        Cell._dbgprefix+='  '
         if not self._isuptodate:
             dbgtext+=", updating it"
             oldcell=Cell.currentCell
@@ -419,6 +421,7 @@ class Cell():
             Cell.currentCell._precedents.append(self)
             Cell.currentCell._precedentvalues.append(self._value)
         dbgtext+=f", returning {repr(self._value)}"
+        Cell._dbgprefix=Cell._dbgprefix[:-2]
         print(dbgtext)
         return self._value
     def _dirty(self):
@@ -426,6 +429,7 @@ class Cell():
             self._isuptodate=False
             for d in self._dependents:
                 d._dirty()
+Cell._dbgprefix=''
 
 def tkthrottle(frequency, root):
     wait=1/frequency
