@@ -405,7 +405,7 @@ class Cell():
     def __call__(self, *args):
         if(len(args)==1):
             if self._arg != args[0]:
-                print(f"Debug: Called cell {self._dbgname}{repr(args)}, changing value from {self._arg} to {args[0]}")
+                print(f"{Cell._dbgprefix}Debug: Called cell {self._dbgname}{repr(args)}, changing value from {self._arg} to {args[0]}")
                 self._arg=args[0]
                 self._needEval=True
                 self._dirty()
@@ -545,7 +545,7 @@ def debug_subprocess_run(*args, **kwargs):
     ret = orig_subprocess_run(*args, **kwargs)
     after=time.time()
     duration=after-before
-    print(f"Subprocess [{duration:.2f}s]: {repr(args)} {repr(kwargs)}", flush=True)
+    print(f"{Cell._dbgprefix}Subprocess [{duration:.2f}s]: {repr(args)} {repr(kwargs)}", flush=True)
     return ret
 subprocess.run = debug_subprocess_run
 
