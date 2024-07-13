@@ -535,4 +535,15 @@ parser.add_argument('-b', '--batch', action=argparse.BooleanOptionalAction, defa
 parser.add_argument('-f', '--flatten', action=argparse.BooleanOptionalAction, default=True, help='Flatten before signing, preventing subsequent changes in PDF forms. (default: True)')
 parser.add_argument('-e', '--existing', type=str, choices=['backup', 'overwrite', 'fail'], default='backup', help='What to do if output file exists. (default: backup)')
 
+# debug subprocess runs
+orig_subprocess_run = subprocess.run
+def debug_subprocess_run(*args, **kwargs):
+    before=time.time()
+    ret = orig_subprocess_run(*args, **kwargs)
+    after=time.time()
+    duration=after-before
+    print(f"Subprocess [{duration:.2f}s]: {repr(args)} {repr(kwargs)}", flush=True)
+    return ret
+subprocess.run = debug_subprocess_run
+
 main(parser.parse_args(sys.argv[1:] or ['-h']))
