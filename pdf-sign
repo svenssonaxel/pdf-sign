@@ -252,7 +252,10 @@ def main(args):
             root._docView.place(x=docViewMargin, y=docViewMargin)
             root._docViewIndex=root._docView.create_image(0, 0, anchor=tk.NW)
             root.bind('<Configure>', onRootResize)
-            root.geometry("800x600")
+            initWinSize=(root.winfo_screenwidth() * 0.8, root.winfo_screenheight() * 0.8)
+            initWinSize=(min(initWinSize[0], initWinSize[1] * pageSize()[0] / pageSize()[1]),
+                         min(initWinSize[1], initWinSize[0] * pageSize()[1] / pageSize()[0]))
+            root.geometry(f"{int(initWinSize[0])}x{int(initWinSize[1])}")
             @Cell
             def updateTitle():
                 root.title(f'Signing page {pageNumber()}/{pageCount} of {filePath}')
