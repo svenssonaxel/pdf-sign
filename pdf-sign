@@ -40,7 +40,7 @@ def main(args):
         pageCount=pdfCountPages(inputPDF)
         if args.page < -pageCount or args.page==0 or pageCount < args.page:
             die('Page number out of range')
-        pageNumber=Cell(args.page if 0 < args.page else pageCount+args.page+1)
+        pageNumber=Cell(args.page if 0 < args.page else pageCount+args.page+1, 'pageNumber')
         @Cell
         def pagePDF():
             outFile=intmp('page.pdf')
@@ -52,7 +52,7 @@ def main(args):
                 'cat', str(pageNumber()),
                 'output', str(outFile)])
             return outFile
-        pageSize=Cell(lambda: pdfGetSize(str(pagePDF())))
+        pageSize=Cell(lambda: pdfGetSize(str(pagePDF())), 'pageSize')
         # The chosen signature
         if not args.signature and args.batch:
             die('In batch mode, signature must be specified.')
@@ -61,12 +61,12 @@ def main(args):
         if not signatures:
             die(f'No .pdf files found in {signatureDir}')
         signatures.sort()
-        signatureIndex=Cell(0)
-        signaturePath=Cell(lambda: args.signature if args.signature else os.path.join(signatureDir, signatures[signatureIndex()]))
-        signatureSize=Cell(lambda: pdfGetSize(signaturePath()))
-        signaturePositionX=Cell(args.x_coordinate)
-        signaturePositionY=Cell(args.y_coordinate)
-        signatureScale=Cell(0)
+        signatureIndex=Cell(0, 'signatureIndex')
+        signaturePath=Cell(lambda: args.signature if args.signature else os.path.join(signatureDir, signatures[signatureIndex()]), 'signaturePath')
+        signatureSize=Cell(lambda: pdfGetSize(signaturePath()), 'signatureSize')
+        signaturePositionX=Cell(args.x_coordinate, 'signaturePositionX')
+        signaturePositionY=Cell(args.y_coordinate, 'signaturePositionY')
+        signatureScale=Cell(0, 'signatureScale')
         @Cell
         def signaturePositionedPDF():
             (w, h)=pageSize()
@@ -98,7 +98,7 @@ def main(args):
             ])
             return outFile
         # The signed page as PNG, for GUI use
-        displayMaxSize=Cell((400, 800))
+        displayMaxSize=Cell((400, 800), 'displayMaxSize')
         @Cell
         def displaySize():
             (maxWidth, maxHeight)=displayMaxSize()
@@ -231,7 +231,10 @@ def main(args):
                 print(f"Debug: in onkey(event): char={event.char}, delta={event.delta}, height={event.height}, keycode={event.keycode}, keysym={event.keysym}, keysym_num={event.keysym_num}, num={event.num}, send_event={event.send_event}, serial={event.serial}, state={event.state}, time={event.time}, type={event.type}, widget={event.widget}, width={event.width}, x={event.x}, x_root={event.x_root}, y={event.y}, y_root={event.y_root}")
                 key=('C-' if event.state in [4, 5] else '')+event.keysym
                 if key in keyToFunction:
+                    print(f"Debug: Calling function for {key}")
                     keyToFunction[key]()
+                else:
+                    print(f"Debug: No function for {key}")
             for key in keyToFunction.keys():
                 root.bind(f'<{key.split("-")[-1]}>', onkey)
             def bindDigit(i, char):
@@ -284,6 +287,7 @@ def main(args):
                 canvasConfig=root._docView.config()
                 canvasWidth=int(canvasConfig['width'][4])
                 canvasHeight=int(canvasConfig['height'][4])
+                print(f"Debug: in onclick(event): canvasConfig={repr(canvasConfig)}, canvasWidth={canvasWidth}, canvasHeight={canvasHeight}, calling cmd_positionSignature({x/canvasWidth}, {y/canvasHeight})")
                 cmd_positionSignature(x/canvasWidth, y/canvasHeight)
             root._docView.bind('<Button-1>', onclick)
             # Run GUI
@@ -365,22 +369,30 @@ def getSignatureDir():
 # Calculations with unchanged inputs are skipped.
 class Cell():
     currentCell=None
-    def __init__(self, arg):
+    def __init__(self, arg, dbgname=None):
+        self._dbgname=dbgname
+        if dbgname==None and callable(arg): self._dbgname=arg.__name__
         self._arg=arg
         self._isuptodate=False
         self._needEval=True
         self._dependents=[]
         self._precedents=[]
         self._precedentvalues=[]
+        print(f"Debug: Init cell {dbgname}{repr(arg)}")
     def __call__(self, *args):
         if(len(args)==1):
             if self._arg != args[0]:
+                print(f"Debug: Called cell {self._dbgname}{repr(args)}, changing value from {self._arg} to {args[0]}")
                 self._arg=args[0]
                 self._needEval=True
                 self._dirty()
+            else:
+                print(f"Debug: Called cell {self._dbgname}{repr(args)}, not changing value.")
             return
         assert len(args)==0
+        dbgtext=f"Debug: Called cell {self._dbgname}{repr(args)}"
         if not self._isuptodate:
+            dbgtext+=", updating it"
             oldcell=Cell.currentCell
             Cell.currentCell=None
             for i in range(len(self._precedents)):
@@ -388,9 +400,11 @@ class Cell():
                 oldval=self._precedentvalues[i]
                 newval=p()
                 if oldval!=newval:
+                    dbgtext+=f", detected change in precedent {p._dbgname}"
                     self._needEval=True
                     break
             if self._needEval:
+                dbgtext+=", evaluating"
                 Cell.currentCell=self
                 for p in self._precedents:
                     p._dependents.remove(self)
@@ -404,6 +418,8 @@ class Cell():
             self._dependents.append(Cell.currentCell)
             Cell.currentCell._precedents.append(self)
             Cell.currentCell._precedentvalues.append(self._value)
+        dbgtext+=f", returning {repr(self._value)}"
+        print(dbgtext)
         return self._value
     def _dirty(self):
         if self._isuptodate:
