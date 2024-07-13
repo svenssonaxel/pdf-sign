@@ -283,7 +283,10 @@ def main(args):
                 if not updateActive:
                     return
                 (w, h) = displaySize()
-                root._docImg = tk.PhotoImage(file=str(displayPNG()))
+                filename = str(displayPNG())
+                before = time.time()
+                root._docImg = tk.PhotoImage(file=filename)
+                print(f"Debug: Loading photo image took {time.time()-before:.2f} seconds", flush=True)
                 root._docView.itemconfig(root._docViewIndex, image=root._docImg)
                 root._docView.configure(width=w, height=h)
                 updateTitle()
