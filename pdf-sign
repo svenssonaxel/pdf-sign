@@ -67,6 +67,52 @@ def main(args):
         signaturePositionX=Cell(args.x_coordinate)
         signaturePositionY=Cell(args.y_coordinate)
         signatureScale=Cell(0)
+        def translatablePDF(path):
+            cache = translatablePDF._cache
+            if path not in cache:
+                (w, h) = pdfGetSize(path)
+                (double_w, double_h) = (2*w, 2*h)
+                testFile = os.path.join(tempdir, 'translateTest.pdf')
+                subprocess.run([
+                    'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+                    f'-sOutputFile={testFile}',
+                    '-sDEVICE=pdfwrite',
+                    f'-dDEVICEWIDTHPOINTS={double_w}', f'-dDEVICEHEIGHTPOINTS={double_h}', '-dFIXEDMEDIA',
+                    '-c', f'<</BeginPage{{{w} {h} translate}}>> setpagedevice',
+                    '-f', path,
+                ], check=True)
+                (test_w, test_h) = pdfGetSize(testFile)
+                if (test_w, test_h) == (double_w, double_h):
+                    # The pdf file at path can be translated correctly
+                    cache[path] = path
+                elif (test_w, test_h) == (w, h):
+                    # The pdf file at path cannot be translated correctly.
+                    # Rather, the size is unchanged. This can happen if the PDF
+                    # has an explicit CropBox set, e.g. is created with
+                    # gs -c '[/CropBox [0 0 100 50] /PAGES pdfmark'. We have to
+                    # remove it to make the PDF translatable and usable as a
+                    # signature.
+                    translatableFileName = os.path.join(tempdir, f'translatable{len(cache)}.pdf')
+                    emptyFileName = os.path.join(tempdir, f'empty{len(cache)}.pdf')
+                    subprocess.run([
+                        'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+                        f'-sOutputFile={emptyFileName}',
+                        '-sDEVICE=pdfwrite',
+                        f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}',
+                    ], check=True)
+                    qpdfOrPdftk([
+                        'qpdf', '--overlay', path, '--',
+                        emptyFileName, translatableFileName,
+                    ],[
+                        'pdftk', emptyFileName,
+                        'stamp', path,
+                        'output', translatableFileName
+                    ])
+                    cache[path] = translatableFileName
+                else:
+                    die(f"The PDF at {path} is unusable as a signature. Reason unknown.")
+            return cache[path]
+        translatablePDF._cache={}
         @Cell
         def signaturePositionedPDF():
             (w, h)=pageSize()
@@ -81,7 +127,7 @@ def main(args):
                 '-sDEVICE=pdfwrite',
                 f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}', '-dFIXEDMEDIA',
                 '-c', f'<</BeginPage{{{resize} {resize} scale {dx} {dy} translate}}>> setpagedevice',
-                '-f', signaturePath(),
+                '-f', translatablePDF(signaturePath()),
             ], check=True)
             return outFile
         # The signed page
