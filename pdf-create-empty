@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
-#Dependencies: python3, gs
+# Dependencies:
+# - python3.7 or later
+# - gs (Ghostscript)
 
 import argparse, os, re, subprocess, sys
 
@@ -41,6 +43,10 @@ def m(pattern, string):
 def die(reason):
     print(reason, file=sys.stderr)
     sys.exit(2)
+
+pyver = sys.version_info
+if not (pyver.major == 3 and pyver.minor >= 7):
+    die("Requires python 3.7 or later")
 
 parser = argparse.ArgumentParser(description='Create an empty, transparent PDF file.')
 parser.add_argument('-o', '--output', metavar='FILE', type=str, help='Output PDF file. (default: empty-DIMENSIONS.pdf)')

@@ -1,24 +1,50 @@
 #!/usr/bin/env python3
 
-#Dependencies: python3.7 or later with module tkinter, gs (Ghostscript), pdftk and pdfinfo.
+# Dependencies:
+# - python3.7 or later with module tkinter
+# - gs (Ghostscript)
+# - qpdf or pdftk (pdf-sign will use pdftk if qpdf cannot be found)
+# - pdfinfo.
 
 import argparse, os, queue, re, subprocess, sys, tempfile, traceback, time
 
+def die(reason):
+    print(reason, file=sys.stderr)
+    sys.exit(1)
+
+pyver = sys.version_info
+if not (pyver.major == 3 and pyver.minor >= 7):
+    die("Requires python 3.7 or later")
+
 # Inspired by https://unix.stackexchange.com/a/141496
 def main(args):
+    if not hasQpdf and not has("pdftk"):
+        die("Needs either qpdf or pdftk installed")
+    if not has("gs"):
+        die("Needs Ghostscript installed")
+    if not has("pdfinfo"):
+        die("Needs pdfinfo installed")
     filePath=args.input
     if not isPdfFilename(filePath):
         die("Input file must end with .pdf (case insensitive)")
+    if filePath.startswith('-'):
+        # A cheap solution to a rare problem
+        die("Input file may not start with a dash (-)")
     with tempfile.TemporaryDirectory() as tempdir:
-        intmp=lambda fileName: Volatile(os.path.join(tempdir, fileName))
+        intmp=lambda fileName: os.path.join(tempdir, fileName)
         # Maybe flatten (make forms non-editable) before signing
         if args.flatten:
-            inputPDF=str(intmp('input.pdf'))
-            subprocess.run([
+            inputPDF=intmp('input.pdf')
+            qpdfOrPdftk([
+                'qpdf',
+                '--flatten-annotations=all',
+                '--generate-appearances',
+                filePath, inputPDF,
+            ],[
                 'pdftk', filePath,
                 'output', inputPDF,
                 'flatten'
-            ], check=True)
+            ])
         else:
             inputPDF=filePath
         # The chosen page
@@ -26,31 +52,114 @@ def main(args):
         if args.page < -pageCount or args.page==0 or pageCount < args.page:
             die('Page number out of range')
         pageNumber=Cell(args.page if 0 < args.page else pageCount+args.page+1)
-        @Cell
+        @VolatileCell
         def pagePDF():
             outFile=intmp('page.pdf')
-            subprocess.run([
+            qpdfOrPdftk([
+                'qpdf', '--pages', '.', f'{pageNumber()}', '--',
+                inputPDF, outFile
+            ],[
                 'pdftk', inputPDF,
                 'cat', str(pageNumber()),
-                'output', str(outFile)
-            ], check=True)
+                'output', outFile])
             return outFile
-        pageSize=Cell(lambda: pdfGetSize(str(pagePDF())))
+        pageSize=Cell(lambda: pdfGetSize(pagePDF()))
         # The chosen signature
-        if not args.signature and args.batch:
-            die('In batch mode, signature must be specified.')
+        if args.batch:
+            if not args.signature and not args.text:
+                die('In batch mode, --signature or --text must be specified.')
+            if args.text and len(args.text) > 1:
+                die('In batch mode, --text must be given only once.')
+        if args.signature and args.text:
+            die('--signature and --text cannot be specified together.')
+        if args.signature and not os.path.exists(args.signature):
+            die(f'File not found: {args.signature}')
+        if args.text:
+            assert(len(args.text) > 0)
+            latin1_chars=set([*range(0x20, 0x7f), *range(0xa0, 0x100)])
+            for text in args.text:
+                text_chars=set(map(ord, text))
+                if not text_chars.issubset(latin1_chars):
+                    die("Error: Only non-control latin-1 characters are supported in --text." +
+                        " Unsupported characters: " + ', '.join(map(hex, text_chars - latin1_chars)))
         signatureDir=getSignatureDir()
-        signatures=[*filter(isPdfFilename, os.listdir(signatureDir))] if not args.signature else [None]
-        if not signatures:
-            die(f'No .pdf files found in {signatureDir}')
+        signatures=[('file', x) for x in filter(isPdfFilename, os.listdir(signatureDir))] if not args.signature else [None]
+        if not signatures and not args.text:
+            die(f'Could not find anything usable as signature, since no .pdf files found in {signatureDir} and no --text option given.')
         signatures.sort()
+        if args.text:
+            signatures=[('text', x) for x in args.text] + signatures
         signatureIndex=Cell(0)
-        signaturePath=Cell(lambda: args.signature if args.signature else os.path.join(signatureDir, signatures[signatureIndex()]))
+        customText=Cell(('text', time.strftime('%Y-%m-%d')))
+        @Cell
+        def signaturePath():
+            if args.signature:
+                return args.signature
+            (signType, content)=signatures[signatureIndex()]
+            if signType=='cell':
+                (signType, content)=content()
+            if signType=='file':
+                return os.path.join(signatureDir, content)
+            assert signType=='text'
+            cache = signaturePath._cache
+            if content in cache:
+                return cache[content]
+            fileName=intmp(f"text{len(cache)}.pdf")
+            text_to_pdf(content, fileName, 12, 1)
+            cache[content]=fileName
+            return fileName
+        signaturePath._cache={}
         signatureSize=Cell(lambda: pdfGetSize(signaturePath()))
         signaturePositionX=Cell(args.x_coordinate)
         signaturePositionY=Cell(args.y_coordinate)
         signatureScale=Cell(0)
-        @Cell
+        def translatablePDF(path):
+            cache = translatablePDF._cache
+            if path not in cache:
+                (w, h) = pdfGetSize(path)
+                (double_w, double_h) = (2*w, 2*h)
+                testFile = intmp('translateTest.pdf')
+                subprocess.run([
+                    'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+                    f'-sOutputFile={testFile}',
+                    '-sDEVICE=pdfwrite',
+                    f'-dDEVICEWIDTHPOINTS={double_w}', f'-dDEVICEHEIGHTPOINTS={double_h}', '-dFIXEDMEDIA',
+                    '-c', f'<</BeginPage{{{w} {h} translate}}>> setpagedevice',
+                    '-f', path,
+                ], check=True)
+                (test_w, test_h) = pdfGetSize(testFile)
+                if (test_w, test_h) == (double_w, double_h):
+                    # The pdf file at path can be translated correctly
+                    cache[path] = path
+                elif (test_w, test_h) == (w, h):
+                    # The pdf file at path cannot be translated correctly.
+                    # Rather, the size is unchanged. This can happen if the PDF
+                    # has an explicit CropBox set, e.g. is created with
+                    # gs -c '[/CropBox [0 0 100 50] /PAGES pdfmark'. We have to
+                    # remove it to make the PDF translatable and usable as a
+                    # signature.
+                    translatableFileName = intmp(f'translatable{len(cache)}.pdf')
+                    emptyFileName = intmp(f'empty{len(cache)}.pdf')
+                    subprocess.run([
+                        'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+                        f'-sOutputFile={emptyFileName}',
+                        '-sDEVICE=pdfwrite',
+                        f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}',
+                    ], check=True)
+                    qpdfOrPdftk([
+                        'qpdf', '--overlay', path, '--',
+                        emptyFileName, translatableFileName,
+                    ],[
+                        'pdftk', emptyFileName,
+                        'stamp', path,
+                        'output', translatableFileName
+                    ])
+                    cache[path] = translatableFileName
+                else:
+                    die(f"The PDF at {path} is unusable as a signature. Reason unknown.")
+            return cache[path]
+        translatablePDF._cache={}
+        @VolatileCell
         def signaturePositionedPDF():
             (w, h)=pageSize()
             (sw, sh)=signatureSize()
@@ -64,18 +173,21 @@ def main(args):
                 '-sDEVICE=pdfwrite',
                 f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}', '-dFIXEDMEDIA',
                 '-c', f'<</BeginPage{{{resize} {resize} scale {dx} {dy} translate}}>> setpagedevice',
-                '-f', signaturePath(),
+                '-f', translatablePDF(signaturePath()),
             ], check=True)
             return outFile
         # The signed page
-        @Cell
+        @VolatileCell
         def signedPagePDF():
             outFile=intmp('signed-page.pdf')
-            subprocess.run([
-                'pdftk', str(pagePDF()),
-                'stamp', str(signaturePositionedPDF()),
-                'output', str(outFile)
-            ], check=True)
+            qpdfOrPdftk([
+                'qpdf', '--overlay', signaturePositionedPDF(), '--',
+                pagePDF(), outFile,
+            ],[
+                'pdftk', pagePDF(),
+                'stamp', signaturePositionedPDF(),
+                'output', outFile
+            ])
             return outFile
         # The signed page as PNG, for GUI use
         displayMaxSize=Cell((400, 800))
@@ -85,7 +197,7 @@ def main(args):
             (pageWidth, pageHeight)=pageSize()
             scale=min(maxWidth/pageWidth, maxHeight/pageHeight)
             return (round(pageWidth*scale), round(pageHeight*scale))
-        @Cell
+        @VolatileCell
         def displayPNG():
             (w, h)=displaySize()
             outFile=intmp('display.png')
@@ -95,7 +207,7 @@ def main(args):
                 '-sDEVICE=pngalpha',
                 '-dMaxBitmap=2147483647',
                 f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}', '-dFIXEDMEDIA', '-dPDFFitPage',
-                '-f', str(signedPagePDF()),
+                '-f', signedPagePDF(),
             ], check=True)
             return outFile
         # GUI
@@ -104,9 +216,11 @@ def main(args):
         if gui:
             try:
                 import tkinter as tk
+                from tkinter import simpledialog
             except ModuleNotFoundError:
                 die('Cannot find Python module `tkinter`, which is needed for interactive use.')
             doSign=False
+            customTextIndex = len(signatures)
             # Commands
             def uf(fun):
                 def ret():
@@ -139,6 +253,39 @@ def main(args):
                 if i<len(signatures):
                     signatureIndex(i)
                     update()
+            def cmd_customText():
+                if args.signature:
+                    return
+                # Get text from user
+                text = simpledialog.askstring(
+                    "Custom Text",
+                    "Input the text you want to stamp this PDF file with",
+                    initialvalue=customText()[1])
+                if text == None:
+                    return
+                # Validate text
+                text_chars=set(map(ord, text))
+                latin1_chars=set([*range(0x20, 0x7f), *range(0xa0, 0x100)])
+                if not text_chars.issubset(latin1_chars):
+                    simpledialog.messagebox.showerror(
+                        parent=root,
+                        title="Invalid text",
+                        message=f"Only non-control latin-1 characters are supported. Unsupported characters: {', '.join(map(hex, text_chars - latin1_chars))}"
+                    )
+                    return
+                if not (1 <= len(text) and len(text) <= 100):
+                    simpledialog.messagebox.showerror(
+                        parent=root,
+                        title="Invalid text",
+                        message="Text must be between 1 and 100 characters long."
+                    )
+                    return
+                # Set text
+                customText(('text', text))
+                signatureIndex(customTextIndex)
+                label='Custom text: ' + (text if len(text) <= 20 else (text[:17] + '...'))
+                placemenu.entryconfig(len(signatures) + 2, label=label)
+                update()
             def cmd_abort():
                 root.destroy()
             def cmd_sign():
@@ -176,8 +323,22 @@ def main(args):
                     if root.signatureControlVar.get() != signatureIndex():
                         signatureIndex(root.signatureControlVar.get())
                         update()
-                for index, filename in enumerate(signatures):
-                    placemenu.add_radiobutton(value=index, label=f'{index+1}: {filename}', underline=0 if index<9 else None, variable=root.signatureControlVar, accelerator=(str(index+1) if index<9 else None), command=updateFromSignatureRadio)
+                for index, (_, signature) in enumerate(signatures):
+                    placemenu.add_radiobutton(
+                        value=index,
+                        label=f'{index+1}: {signature}',
+                        underline=0 if index<9 else None,
+                        variable=root.signatureControlVar,
+                        accelerator=(str(index+1) if index<9 else None),
+                        command=updateFromSignatureRadio)
+                signatures.append(('cell', customText))
+                placemenu.add_radiobutton(
+                    value=customTextIndex,
+                    label='Custom text: ' + customText()[1],
+                    underline=7,
+                    variable=root.signatureControlVar,
+                    accelerator='T',
+                    command=cmd_customText)
                 placemenu.add_separator()
             placemenu.add_command(label='Enlarge signature', underline=0, accelerator='+', command=cmd_enlargeSignature)
             placemenu.add_command(label='Shrink signature', underline=0, accelerator='-', command=cmd_shrinkSignature)
@@ -205,6 +366,8 @@ def main(args):
                 'q': cmd_abort,
                 'S': cmd_sign,
                 's': cmd_sign,
+                'T': cmd_customText,
+                't': cmd_customText,
                 'space': cmd_sign,
             }
             def onkey(event):
@@ -218,38 +381,48 @@ def main(args):
                 root.bind(f'{char}', onkey)
             for i, char in enumerate("123456789"): bindDigit(i, char)
             # Canvas and click binding
-            root._docView=tk.Canvas(root, borderwidth=0, background='#ffffff', confine=True)
-            def onDocViewResize(event):
-                canvasMarginX=event.x
-                canvasMarginY=event.y
-                canvasWidth=event.width
-                canvasHeight=event.height
-                (oldMaxWidth, oldMaxHeight)=displayMaxSize()
-                if(0<canvasMarginX and 0<canvasMarginY):
-                    apparentScale=max(canvasHeight/oldMaxHeight, canvasWidth/oldMaxWidth, 0.5)
-                    newMaxWidth=(canvasWidth+2*canvasMarginX)/apparentScale-10
-                    newMaxHeight=(canvasHeight+2*canvasMarginY)/apparentScale-10
-                else:
-                    newMaxWidth=oldMaxWidth/2
-                    newMaxHeight=oldMaxHeight/2
-                newMaxWidth=max(newMaxWidth, 10)
-                newMaxHeight=max(newMaxHeight, 10)
-                if abs(oldMaxWidth-newMaxWidth) < 5: newMaxWidth=oldMaxWidth
-                if abs(oldMaxHeight-newMaxHeight) < 5: newMaxHeight=oldMaxHeight
-                if oldMaxWidth != newMaxWidth or oldMaxHeight != newMaxHeight:
-                    displayMaxSize((newMaxWidth, newMaxHeight))
+            root._docView=tk.Canvas(root, borderwidth=0, background='#ffffff')
+            docViewMargin=5
+            docViewMinDimension=50
+            def onRootResize(event):
+                rootWidth=root.winfo_width()
+                rootHeight=root.winfo_height()
+                newMaxDisplayDimensions=(max(rootWidth - 2 * docViewMargin, docViewMinDimension),
+                                         max(rootHeight - 2 * docViewMargin, docViewMinDimension))
+                if displayMaxSize() != newMaxDisplayDimensions:
+                    displayMaxSize(newMaxDisplayDimensions)
                     update()
-            root._docView.pack(expand=1)
+            root._docView.place(x=docViewMargin, y=docViewMargin)
             root._docViewIndex=root._docView.create_image(0, 0, anchor=tk.NW)
-            root._docView.bind('<Configure>', onDocViewResize)
-            root.geometry("800x600")
+            root.bind('<Configure>', onRootResize)
+            initWinSize=(root.winfo_screenwidth() * 0.8, root.winfo_screenheight() * 0.8)
+            initWinSize=(min(initWinSize[0], initWinSize[1] * pageSize()[0] / pageSize()[1]),
+                         min(initWinSize[1], initWinSize[0] * pageSize()[1] / pageSize()[0]))
+            root.geometry(f"{int(initWinSize[0])}x{int(initWinSize[1])}")
             @Cell
             def updateTitle():
                 root.title(f'Signing page {pageNumber()}/{pageCount} of {filePath}')
+            # The update function triggers heavy PDF file operations, so we try
+            # to avoid calling it too much. In particular,
+            # 1) Depending on desktop environment and window manager, one or
+            #    more resizes can happen soon after startup, triggering an
+            #    update. We use the updateActive flag to avoid these, then
+            #    instead update once 100 ms after startup.
+            # 2) An interactive resizing process using the pointer can produce a
+            #    lot of resizing events. We use the @tkthrottle decorator to
+            #    reduce them.
+            updateActive = False
+            def soonAfterStart():
+                nonlocal updateActive
+                updateActive = True
+                update()
+            root.after(100, soonAfterStart)
             @tkthrottle(100, root)
             def update():
+                if not updateActive:
+                    return
                 (w, h) = displaySize()
-                root._docImg = tk.PhotoImage(file=str(displayPNG()))
+                root._docImg = tk.PhotoImage(file=displayPNG())
                 root._docView.itemconfig(root._docViewIndex, image=root._docImg)
                 root._docView.configure(width=w, height=h)
                 updateTitle()
@@ -283,7 +456,15 @@ def main(args):
                 else:
                     assert args.existing=='overwrite'
             pnr=pageNumber()
-            subprocess.run([
+            qpdfOrPdftk([
+                'qpdf', '--pages',
+                *(['.', f'1-{pnr-1}'] if 1 < pnr else []),
+                signedPagePDF(), '1',
+                *(['.', f'{pnr+1}-z'] if pnr < pageCount else []),
+                '--',
+                inputPDF,
+                signedFilePath,
+            ],[
                 'pdftk',
                 f'A={inputPDF}',
                 f'B={signedPagePDF()}',
@@ -292,32 +473,59 @@ def main(args):
                 'B',
                 *([f'A{pnr+1}-end'] if pnr < pageCount else []),
                 'output', signedFilePath,
-            ], check=True)
+            ])
             print(f'Signed document saved as {signedFilePath}')
         else:
             print(f'Aborted')
 
-# Used for file names that don't change but represents changed content
-class Volatile():
-    def __init__(self, underlying): self._underlying = underlying
-    def __eq__(self, other): return self is other
-    def __str__(self): return str(self._underlying)
+def has(cmd):
+    return subprocess.run(["which", cmd], check=False, capture_output=True).returncode == 0
+hasQpdf = has("qpdf")
+def qpdfOrPdftk(qpdfCmd, pdftkCmd):
+    assert qpdfCmd[0] == "qpdf" and pdftkCmd[0] == "pdftk"
+    cmd = qpdfCmd if hasQpdf else pdftkCmd
+    subprocess.run(cmd, check=True)
+    return True # Some lambdas above rely on this
 
 def getSignatureDir():
-    if 'PDF_SIGNATURE_DIR' in os.environ:
-        sd=os.environ['PDF_SIGNATURE_DIR']
-    elif 'XDG_CONFIG_HOME' in os.environ:
-        sd=os.path.join(os.environ['XDG_CONFIG_HOME'], 'pdf_signatures')
-    elif os.path.exists(os.path.expanduser("~/.config/pdf_signatures")):
-        sd="~/.config/pdf_signatures"
-    else:
-        sd="~/.pdf_signatures"
-    sd=os.path.expanduser(sd)
-    if not os.path.exists(sd):
-        raise Exception(f'Signature directory {sd} does not exist')
-    if not os.path.isdir(sd):
-        raise Exception(f'Signature directory {sd} is not a directory')
-    return sd
+    (path, helptxt) = getSignatureDirAndHelp()
+    if not path:
+        die(f"Could not find a valid signature directory. The options considered are: {helptxt}")
+    return path
+
+def getSignatureDirAndHelp():
+    def candidate(prevpath, prevhelptxt, nr, lbl, envvar, path):
+        helptxt = f"{nr}) {lbl}"
+        if prevhelptxt: helptxt = f"{prevhelptxt} {helptxt}"
+        if envvar and not envvar in os.environ:
+            helptxt += " which is not used since the environment variable is not set."
+            return (prevpath, helptxt)
+        path = os.path.expanduser(path)
+        if not os.path.exists(path):
+            helptxt += f" which is not used since {path} does not exist."
+            return (prevpath, helptxt)
+        if not os.path.isdir(path):
+            helptxt += f" which is not used since {path} is not a directory."
+            return (prevpath, helptxt)
+        if prevpath:
+            helptxt += f" which is valid, but not used since it's not the highest priority directory."
+            return (prevpath, helptxt)
+        helptxt += f" which resolves to {path} and IS USED as the signature directory."
+        return (path, helptxt)
+    (path, helptxt) = (None, None)
+    (path, helptxt) = candidate(path, helptxt,
+        1, '$PDF_SIGNATURE_DIR', 'PDF_SIGNATURE_DIR',
+        os.environ.get('PDF_SIGNATURE_DIR'))
+    (path, helptxt) = candidate(path, helptxt,
+        2, '$XDG_CONFIG_HOME/pdf_signatures', 'XDG_CONFIG_HOME',
+        os.path.join(os.environ.get('XDG_CONFIG_HOME') or '/', 'pdf_signatures'))
+    (path, helptxt) = candidate(path, helptxt,
+        3, '~/.config/pdf_signatures', None,
+        '~/.config/pdf_signatures')
+    (path, helptxt) = candidate(path, helptxt,
+        4, '~/.pdf_signatures', None,
+        '~/.pdf_signatures')
+    return (path, helptxt)
 
 # Simple dependency tracking.
 # Init with a value or function to calculate the value.
@@ -347,7 +555,8 @@ class Cell():
             for i in range(len(self._precedents)):
                 p=self._precedents[i]
                 oldval=self._precedentvalues[i]
-                newval=p()
+                p()
+                newval=p._cacheid()
                 if oldval!=newval:
                     self._needEval=True
                     break
@@ -364,13 +573,89 @@ class Cell():
         if(Cell.currentCell):
             self._dependents.append(Cell.currentCell)
             Cell.currentCell._precedents.append(self)
-            Cell.currentCell._precedentvalues.append(self._value)
+            Cell.currentCell._precedentvalues.append(self._cacheid())
         return self._value
     def _dirty(self):
         if self._isuptodate:
             self._isuptodate=False
             for d in self._dependents:
                 d._dirty()
+    def _cacheid(self):
+        assert self._isuptodate
+        return self._value
+# When the return value is just a file name, the contents of that file needs to
+# be taken into account in order to decide whether the "value" has changed. In
+# these cases, we track the precedent values along the cell's own value.
+class VolatileCell(Cell):
+    def _cacheid(self):
+        assert self._isuptodate
+        return (self._value, self._precedentvalues)
+
+# Keep this function in sync with pdf-from-text
+def text_to_pdf(text, output, size, margin):
+    # Validate text
+    text_chars=set(map(ord, text))
+    latin1_chars=set([*range(0x20, 0x7f), *range(0xa0, 0x100)])
+    if not text_chars.issubset(latin1_chars):
+        die(f"Error: Only non-control latin-1 characters are supported. Unsupported characters: {', '.join(map(hex, text_chars - latin1_chars))}")
+    text.encode('latin-1').decode('latin-1') # Assertion. E.i., an exception here indicates a bug.
+    with tempfile.TemporaryDirectory() as tempdir:
+        # Write postscript file
+        ps_file=os.path.join(tempdir, "file.ps")
+        text_len=len(text)
+        w=text_len * size + margin * 2
+        h=size * 3 + margin * 2
+        x=size + margin
+        y=size + margin
+        ps_text = (text
+                   .replace("\\", "\\\\")
+                   .replace("(", "\\(")
+                   .replace(")", "\\)")
+                   )
+        def write_ps():
+            with open(ps_file, "w", encoding="latin-1") as f:
+                f.write('\n'.join([
+                    "%!PS-Adobe-3.0",
+                    f"%%BoundingBox: 0 0 {w} {h}",
+                    "%%Pages: 1",
+                    "%%EndComments",
+                    "%%Page: 1 1",
+                    f"/DejaVuSansMono findfont {size} scalefont setfont",
+                    f"{x} {y} moveto",
+                    f"({ps_text}) show",
+                    "showpage"]))
+        # Write postscript file with too big bounding box
+        write_ps()
+        # Get correct bounding box
+        bbox_result = subprocess.run([
+            "gs", '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+            "-sDEVICE=bbox",
+            ps_file
+        ], stderr=subprocess.PIPE, text=True, check=True)
+        bbox = m(r'.*%%HiResBoundingBox: (\d+(\.\d+)?) (\d+(\.\d+)?) (\d+(\.\d+)?) (\d+(\.\d+)?)\n.*', bbox_result.stderr)
+        if not bbox:
+            die("Error: Unable to extract bounding box.")
+        # Adjust variables for bounding box
+        llx, lly, urx, ury = float(bbox[1]), float(bbox[3]), float(bbox[5]), float(bbox[7])
+        llx, lly, urx, ury = llx - margin, lly - margin, urx + margin, ury + margin
+        w=urx - llx
+        h=ury - lly
+        x-=llx
+        y-=lly
+        # Write postscript file with correct bounding box
+        write_ps()
+        # Convert to PDF
+        gs_cmd = [
+            "gs", '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+            "-o", output,
+            "-sDEVICE=pdfwrite",
+            f"-dDEVICEWIDTHPOINTS={w}",
+            f"-dDEVICEHEIGHTPOINTS={h}",
+            "-dFIXEDMEDIA",
+            "-c", "[ /PAGES pdfmark",
+            "-f", ps_file
+        ]
+        subprocess.run(gs_cmd, check=True, stdout=subprocess.DEVNULL)
 
 def tkthrottle(frequency, root):
     wait=1/frequency
@@ -394,10 +679,10 @@ def tkthrottle(frequency, root):
     return decorator
 
 def pdfCountPages(filePath):
-    return int(fromCmdOutput(["pdfinfo", str(filePath)], "^.*\nPages: +([0-9]+)\n.*$")[1])
+    return int(fromCmdOutput(["pdfinfo", filePath], r"^.*\nPages: +([0-9]+)\n.*$")[1])
 
 def pdfGetSize(filePath):
-    [ignored, w, h, *ignored2]=fromCmdOutput(['pdfinfo', filePath], '^.*\nPage size: +([0-9.]+) x ([0-9.]+) pts( \([A-Za-z0-9]+\))?\n.*$')
+    [ignored, w, h, *ignored2]=fromCmdOutput(['pdfinfo', filePath], r'^.*\nPage size: +([0-9.]+) x ([0-9.]+) pts( \([A-Za-z0-9]+\))?\n.*$')
     return (float(w), float(h))
 
 def m(pattern, string):
@@ -419,10 +704,6 @@ def fromCmdOutput(cmd, pattern):
     result=sp.stdout.decode('utf-8')
     return m(pattern, result)
 
-def die(reason):
-    print(reason, file=sys.stderr)
-    sys.exit(1)
-
 # Monkey-patch argparse if necessary
 if not 'BooleanOptionalAction' in dir(argparse):
     class BooleanOptionalAction(argparse.Action):
@@ -443,17 +724,32 @@ if not 'BooleanOptionalAction' in dir(argparse):
             return ' | '.join(self.option_strings)
     argparse.BooleanOptionalAction = BooleanOptionalAction
 
-parser = argparse.ArgumentParser(description='Sign a PDF file.')
+
+def getSignatureHelp():
+    (path, helptxt) = getSignatureDirAndHelp()
+    ret="""
+        Path to file used as signature.
+        Required in batch mode unless -t is given.
+        In GUI mode, the user can choose among PDF files in the signature directory.
+    """
+    if path:
+        ret += f"The signature directory is {path}, chosen from these options: {helptxt}"
+    else:
+        ret += f"Right now, no signature directory could be found. The options are: {helptxt}"
+    return ret
+
+parser = argparse.ArgumentParser(description='Sign a PDF file, with a non-cryptographic squiggle.')
 parser.add_argument('input', metavar='input.pdf', type=str, help='Input PDF file.')
 parser.add_argument('-p', '--page', type=int, default=-1, help='The page to sign, negative for counting from the end. (default: -1)')
-parser.add_argument('-s', '--signature', type=str, help='Path to file used as signature. Required in batch mode. In GUI mode, the user can choose among files in $PDF_SIGNATURE_DIR, $XDG_CONFIG_HOME/pdf_signatures (defaulting to ~/.config/pdf_signatures), or ~/.pdf_signatures.')
+parser.add_argument('-s', '--signature', type=str, help=getSignatureHelp())
 parser.add_argument('-x', '--x-coordinate', type=float, default=0.5, help='Horizontal coordinate of signature center, in page width units. (default: 0.5)')
 parser.add_argument('-y', '--y-coordinate', type=float, default=0.75, help='Vertical coordinate of signature center, in page height units. (default: 0.75)')
 parser.add_argument('-W', '--width', type=float, default=0.28, help='Width of box to fit signature to, in page width units. (default: 0.28)')
-parser.add_argument('-H', '--height', type=float, default=0.28, help='Height of box to fit signature to, in page height units. (default: 0.28)')
+parser.add_argument('-H', '--height', type=float, default=0.11, help='Height of box to fit signature to, in page height units. (default: 0.11)')
 parser.add_argument('-o', '--output', type=str, help='Output file. (default: Add ".signed" before the extension)')
-parser.add_argument('-b', '--batch', action=argparse.BooleanOptionalAction, default=False, help='Batch mode: do not show GUI.')
-parser.add_argument('-f', '--flatten', action=argparse.BooleanOptionalAction, default=True, help='Flatten before signing.')
+parser.add_argument('-b', '--batch', action=argparse.BooleanOptionalAction, default=False, help='Batch mode: do not show GUI. (default: False)')
+parser.add_argument('-f', '--flatten', action=argparse.BooleanOptionalAction, default=True, help='Flatten before signing, preventing subsequent changes in PDF forms. (default: True)')
 parser.add_argument('-e', '--existing', type=str, choices=['backup', 'overwrite', 'fail'], default='backup', help='What to do if output file exists. (default: backup)')
+parser.add_argument('-t', '--text', type=str, action='append', help='In GUI mode, a text option to be added to the list of signatures (can be repeated). In batch mode only one can be given, and will be used instead of --signature.')
 
 main(parser.parse_args(sys.argv[1:] or ['-h']))

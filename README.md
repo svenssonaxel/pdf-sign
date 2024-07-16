@@ -16,12 +16,13 @@ The recommended way is:
 * Use an application of your choice to sign it.
   You can for example use Okular's Freehand Line, or transfer it to your smartphone and use Adobe Acrobat Reader.
   Keep in mind that it's the center of this mini-page that will be used for positioning the signature.
-* Put the signed file in `~/.pdf_signatures/`.
+* Put the signed file in your signature directory.
+  The signature directory is `$PDF_SIGNATURE_DIR`, `$XDG_CONFIG_HOME/pdf_signatures`, `$HOME/.config/pdf_signatures` or `$HOME/.pdf_signatures/`; the first one that exists. Use `pdf-sign -h` to confirm which one will be used on your system.
 
 You can now use the `pdf-sign` tool interactively (or non-interactively) to sign PDF files.
 The GUI is self documented and allows both keyboard-only and pointer-only operation.
 
-Run `pdf-sign -h` or `pdf-create-empty -h` for details.
+Run `pdf-sign -h`, `pdf-create-empty -h` or `pdf-from-text -h` for details.
 
 **Installation**
 
@@ -29,7 +30,7 @@ Run `pdf-sign -h` or `pdf-create-empty -h` for details.
   * `python3.7` or later
   * Python module `tkinter` (only needed for interactive use)
   * `gs` (Ghostscript)
-  * `pdftk`
+  * `qpdf` or `pdftk` (at least one of them)
   * `pdfinfo`
 * Copy one or both tools to a directory in your `$PATH`.
 
@@ -40,8 +41,18 @@ apt-get update
 apt-get install -y coreutils git python3 python3-tk ghostscript pdftk poppler-utils
 git clone https://github.com/svenssonaxel/pdf-sign.git
 cd pdf-sign
-cp pdf-sign pdf-create-empty /usr/local/bin/
+cp pdf-sign pdf-create-empty pdf-from-text /usr/local/bin/
 ```
+
+### Related use cases
+
+* You can add the date or other pieces of text using the `--text` CLI option or `Signature -> Custom text` menu option.
+* You can convert SVG stamps/marks and add them to your signature directory. Example:
+  ```
+  curl -LO https://www.svgrepo.com/download/438371/checkmark-round.svg
+  sudo apt-get install librsvg2-bin
+  rsvg-convert -f pdf -o ~/.pdf_signatures/check.pdf checkmark-round.svg
+  ```
 
 ## Why
 
