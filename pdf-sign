@@ -8,8 +8,14 @@
 
 import argparse, os, queue, re, subprocess, sys, tempfile, traceback, time
 
+from inspect import currentframe
+starttime=time.time()
+def tdbg():
+    print(f"========== DBG: line {currentframe().f_back.f_lineno}, time after start={time.time()-starttime:.3f} ==========", flush=True)
+
 # Inspired by https://unix.stackexchange.com/a/141496
 def main(args):
+    tdbg()
     if not hasQpdf and not has("pdftk"):
         die("Needs either qpdf or pdftk installed")
     if not has("gs"):
@@ -19,7 +25,9 @@ def main(args):
     filePath=args.input
     if not isPdfFilename(filePath):
         die("Input file must end with .pdf (case insensitive)")
+    tdbg()
     with tempfile.TemporaryDirectory() as tempdir:
+        tdbg()
         intmp=lambda fileName: Volatile(os.path.join(tempdir, fileName))
         # Maybe flatten (make forms non-editable) before signing
         if args.flatten:
@@ -36,6 +44,7 @@ def main(args):
             ])
         else:
             inputPDF=filePath
+        tdbg()
         # The chosen page
         pageCount=pdfCountPages(inputPDF)
         if args.page < -pageCount or args.page==0 or pageCount < args.page:
@@ -54,6 +63,7 @@ def main(args):
             return outFile
         pageSize=Cell(lambda: pdfGetSize(str(pagePDF())), 'pageSize')
         # The chosen signature
+        tdbg()
         if not args.signature and args.batch:
             die('In batch mode, signature must be specified.')
         signatureDir=getSignatureDir()
@@ -67,6 +77,7 @@ def main(args):
         signaturePositionX=Cell(args.x_coordinate, 'signaturePositionX')
         signaturePositionY=Cell(args.y_coordinate, 'signaturePositionY')
         signatureScale=Cell(0, 'signatureScale')
+        tdbg()
         @Cell
         def signaturePositionedPDF():
             (w, h)=pageSize()
@@ -109,6 +120,7 @@ def main(args):
         def displayPNG():
             (w, h)=displaySize()
             outFile=intmp('display.png')
+            tdbg()
             subprocess.run([
                 'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
                 f'-sOutputFile={outFile}',
@@ -117,11 +129,13 @@ def main(args):
                 f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}', '-dFIXEDMEDIA', '-dPDFFitPage',
                 '-f', str(signedPagePDF()),
             ], check=True)
+            tdbg()
             return outFile
         # GUI
         doSign=True
         gui=not args.batch
         if gui:
+            tdbg()
             try:
                 import tkinter as tk
             except ModuleNotFoundError:
@@ -171,7 +185,9 @@ def main(args):
                 sys.exit(1)
             tk.Tk.report_callback_exception = tkerror
             # Window and menu
+            tdbg()
             root = tk.Tk(className="pdf-sign")
+            tdbg()
             rootmenu = tk.Menu(root)
             root.config(menu=rootmenu)
             filemenu = tk.Menu(rootmenu, tearoff=0)
@@ -242,9 +258,12 @@ def main(args):
                 root.bind(f'{char}', onkey)
             for i, char in enumerate("123456789"): bindDigit(i, char)
             # Canvas and click binding
+            tdbg()
             root._docView=tk.Canvas(root, borderwidth=0, background='#ffffff')
+            tdbg()
             docViewMargin=5
             docViewMinDimension=50
+            tdbg()
             def onRootResize(event):
                 rootWidth=root.winfo_width()
                 rootHeight=root.winfo_height()
@@ -260,6 +279,7 @@ def main(args):
             initWinSize=(min(initWinSize[0], initWinSize[1] * pageSize()[0] / pageSize()[1]),
                          min(initWinSize[1], initWinSize[0] * pageSize()[1] / pageSize()[0]))
             root.geometry(f"{int(initWinSize[0])}x{int(initWinSize[1])}")
+            tdbg()
             @Cell
             def updateTitle():
                 root.title(f'Signing page {pageNumber()}/{pageCount} of {filePath}')
@@ -278,14 +298,18 @@ def main(args):
                 updateActive = True
                 update()
             root.after(100, soonAfterStart)
+            tdbg()
             @tkthrottle(100, root)
             def update():
+                tdbg()
                 if not updateActive:
                     return
                 (w, h) = displaySize()
                 filename = str(displayPNG())
                 before = time.time()
+                tdbg()
                 root._docImg = tk.PhotoImage(file=filename)
+                tdbg()
                 print(f"Debug: Loading photo image took {time.time()-before:.2f} seconds", flush=True)
                 root._docView.itemconfig(root._docViewIndex, image=root._docImg)
                 root._docView.configure(width=w, height=h)
@@ -293,6 +317,7 @@ def main(args):
                 if not args.signature:
                     if root.signatureControlVar.get() != signatureIndex():
                         root.signatureControlVar.set(signatureIndex())
+                tdbg()
             def dbg(event, x):
                 print(f"Debug: in dbg(event) for {x}: char={event.char}, delta={event.delta}, height={event.height}, keycode={event.keycode}, keysym={event.keysym}, keysym_num={event.keysym_num}, num={event.num}, send_event={event.send_event}, serial={event.serial}, state={event.state}, time={event.time}, type={event.type}, widget={event.widget}, width={event.width}, x={event.x}, x_root={event.x_root}, y={event.y}, y_root={event.y_root}")
             def dbgfun(x):
@@ -303,6 +328,7 @@ def main(args):
             root._docView.bind('<Button>', dbgfun("root._docView <Button>"))
             root.bind('<KeyPress>', dbgfun("root <KeyPress>"))
             root.bind('<Button>', dbgfun("root <Button>"))
+            tdbg()
             def onclick(event):
                 print(f"Debug: in onclick(event): char={event.char}, delta={event.delta}, height={event.height}, keycode={event.keycode}, keysym={event.keysym}, keysym_num={event.keysym_num}, num={event.num}, send_event={event.send_event}, serial={event.serial}, state={event.state}, time={event.time}, type={event.type}, widget={event.widget}, width={event.width}, x={event.x}, x_root={event.x_root}, y={event.y}, y_root={event.y_root}")
                 x=event.x
@@ -314,7 +340,9 @@ def main(args):
                 cmd_positionSignature(x/canvasWidth, y/canvasHeight)
             root._docView.bind('<Button-1>', onclick)
             # Run GUI
+            tdbg()
             root.mainloop()
+            tdbg()
         # End of GUI
         if doSign:
             signedFilePath=args.output if args.output else f'{filePath[:-4]}.signed{filePath[-4:]}'
