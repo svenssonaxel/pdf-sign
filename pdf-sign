@@ -23,10 +23,10 @@ def main(args):
         # A cheap solution to a rare problem
         die("Input file may not start with a dash (-)")
     with tempfile.TemporaryDirectory() as tempdir:
-        intmp=lambda fileName: Volatile(os.path.join(tempdir, fileName))
+        intmp=lambda fileName: os.path.join(tempdir, fileName)
         # Maybe flatten (make forms non-editable) before signing
         if args.flatten:
-            inputPDF=str(intmp('input.pdf'))
+            inputPDF=intmp('input.pdf')
             qpdfOrPdftk([
                 'qpdf',
                 '--flatten-annotations=all',
@@ -44,18 +44,18 @@ def main(args):
         if args.page < -pageCount or args.page==0 or pageCount < args.page:
             die('Page number out of range')
         pageNumber=Cell(args.page if 0 < args.page else pageCount+args.page+1)
-        @Cell
+        @VolatileCell
         def pagePDF():
             outFile=intmp('page.pdf')
             qpdfOrPdftk([
                 'qpdf', '--pages', '.', f'{pageNumber()}', '--',
-                inputPDF, str(outFile)
+                inputPDF, outFile
             ],[
                 'pdftk', inputPDF,
                 'cat', str(pageNumber()),
-                'output', str(outFile)])
+                'output', outFile])
             return outFile
-        pageSize=Cell(lambda: pdfGetSize(str(pagePDF())))
+        pageSize=Cell(lambda: pdfGetSize(pagePDF()))
         # The chosen signature
         if args.batch:
             if not args.signature and not args.text:
@@ -96,7 +96,7 @@ def main(args):
             cache = signaturePath._cache
             if content in cache:
                 return cache[content]
-            fileName=os.path.join(tempdir, f"text{len(cache)}.pdf")
+            fileName=intmp(f"text{len(cache)}.pdf")
             text_to_pdf(content, fileName, 12, 1)
             cache[content]=fileName
             return fileName
@@ -110,7 +110,7 @@ def main(args):
             if path not in cache:
                 (w, h) = pdfGetSize(path)
                 (double_w, double_h) = (2*w, 2*h)
-                testFile = os.path.join(tempdir, 'translateTest.pdf')
+                testFile = intmp('translateTest.pdf')
                 subprocess.run([
                     'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
                     f'-sOutputFile={testFile}',
@@ -130,8 +130,8 @@ def main(args):
                     # gs -c '[/CropBox [0 0 100 50] /PAGES pdfmark'. We have to
                     # remove it to make the PDF translatable and usable as a
                     # signature.
-                    translatableFileName = os.path.join(tempdir, f'translatable{len(cache)}.pdf')
-                    emptyFileName = os.path.join(tempdir, f'empty{len(cache)}.pdf')
+                    translatableFileName = intmp(f'translatable{len(cache)}.pdf')
+                    emptyFileName = intmp(f'empty{len(cache)}.pdf')
                     subprocess.run([
                         'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
                         f'-sOutputFile={emptyFileName}',
@@ -151,7 +151,7 @@ def main(args):
                     die(f"The PDF at {path} is unusable as a signature. Reason unknown.")
             return cache[path]
         translatablePDF._cache={}
-        @Cell
+        @VolatileCell
         def signaturePositionedPDF():
             (w, h)=pageSize()
             (sw, sh)=signatureSize()
@@ -169,16 +169,16 @@ def main(args):
             ], check=True)
             return outFile
         # The signed page
-        @Cell
+        @VolatileCell
         def signedPagePDF():
             outFile=intmp('signed-page.pdf')
             qpdfOrPdftk([
-                'qpdf', '--overlay', str(signaturePositionedPDF()), '--',
-                str(pagePDF()), str(outFile),
+                'qpdf', '--overlay', signaturePositionedPDF(), '--',
+                pagePDF(), outFile,
             ],[
-                'pdftk', str(pagePDF()),
-                'stamp', str(signaturePositionedPDF()),
-                'output', str(outFile)
+                'pdftk', pagePDF(),
+                'stamp', signaturePositionedPDF(),
+                'output', outFile
             ])
             return outFile
         # The signed page as PNG, for GUI use
@@ -189,7 +189,7 @@ def main(args):
             (pageWidth, pageHeight)=pageSize()
             scale=min(maxWidth/pageWidth, maxHeight/pageHeight)
             return (round(pageWidth*scale), round(pageHeight*scale))
-        @Cell
+        @VolatileCell
         def displayPNG():
             (w, h)=displaySize()
             outFile=intmp('display.png')
@@ -199,7 +199,7 @@ def main(args):
                 '-sDEVICE=pngalpha',
                 '-dMaxBitmap=2147483647',
                 f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}', '-dFIXEDMEDIA', '-dPDFFitPage',
-                '-f', str(signedPagePDF()),
+                '-f', signedPagePDF(),
             ], check=True)
             return outFile
         # GUI
@@ -414,7 +414,7 @@ def main(args):
                 if not updateActive:
                     return
                 (w, h) = displaySize()
-                root._docImg = tk.PhotoImage(file=str(displayPNG()))
+                root._docImg = tk.PhotoImage(file=displayPNG())
                 root._docView.itemconfig(root._docViewIndex, image=root._docImg)
                 root._docView.configure(width=w, height=h)
                 updateTitle()
@@ -451,7 +451,7 @@ def main(args):
             qpdfOrPdftk([
                 'qpdf', '--pages',
                 *(['.', f'1-{pnr-1}'] if 1 < pnr else []),
-                str(signedPagePDF()), '1',
+                signedPagePDF(), '1',
                 *(['.', f'{pnr+1}-z'] if pnr < pageCount else []),
                 '--',
                 inputPDF,
@@ -469,12 +469,6 @@ def main(args):
             print(f'Signed document saved as {signedFilePath}')
         else:
             print(f'Aborted')
-
-# Used for file names that don't change but represents changed content
-class Volatile():
-    def __init__(self, underlying): self._underlying = underlying
-    def __eq__(self, other): return self is other
-    def __str__(self): return str(self._underlying)
 
 def has(cmd):
     return subprocess.run(["which", cmd], check=False, capture_output=True).returncode == 0
@@ -553,7 +547,8 @@ class Cell():
             for i in range(len(self._precedents)):
                 p=self._precedents[i]
                 oldval=self._precedentvalues[i]
-                newval=p()
+                p()
+                newval=p._cacheid()
                 if oldval!=newval:
                     self._needEval=True
                     break
@@ -570,13 +565,23 @@ class Cell():
         if(Cell.currentCell):
             self._dependents.append(Cell.currentCell)
             Cell.currentCell._precedents.append(self)
-            Cell.currentCell._precedentvalues.append(self._value)
+            Cell.currentCell._precedentvalues.append(self._cacheid())
         return self._value
     def _dirty(self):
         if self._isuptodate:
             self._isuptodate=False
             for d in self._dependents:
                 d._dirty()
+    def _cacheid(self):
+        assert self._isuptodate
+        return self._value
+# When the return value is just a file name, the contents of that file needs to
+# be taken into account in order to decide whether the "value" has changed. In
+# these cases, we track the precedent values along the cell's own value.
+class VolatileCell(Cell):
+    def _cacheid(self):
+        assert self._isuptodate
+        return (self._value, self._precedentvalues)
 
 # Keep this function in sync with pdf-from-text
 def text_to_pdf(text, output, size, margin):
@@ -666,7 +671,7 @@ def tkthrottle(frequency, root):
     return decorator
 
 def pdfCountPages(filePath):
-    return int(fromCmdOutput(["pdfinfo", str(filePath)], "^.*\nPages: +([0-9]+)\n.*$")[1])
+    return int(fromCmdOutput(["pdfinfo", filePath], "^.*\nPages: +([0-9]+)\n.*$")[1])
 
 def pdfGetSize(filePath):
     [ignored, w, h, *ignored2]=fromCmdOutput(['pdfinfo', filePath], '^.*\nPage size: +([0-9.]+) x ([0-9.]+) pts( \([A-Za-z0-9]+\))?\n.*$')
