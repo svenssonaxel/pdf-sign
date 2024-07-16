@@ -94,5 +94,9 @@ def die(reason):
     print(reason, file=sys.stderr)
     sys.exit(2)
 
+pyver = sys.version_info
+if not (pyver.major == 3 and pyver.minor >= 7):
+    die("Requires python 3.7 or later")
+
 if __name__ == "__main__":
     main()

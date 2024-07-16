@@ -8,6 +8,14 @@
 
 import argparse, os, queue, re, subprocess, sys, tempfile, traceback, time
 
+def die(reason):
+    print(reason, file=sys.stderr)
+    sys.exit(1)
+
+pyver = sys.version_info
+if not (pyver.major == 3 and pyver.minor >= 7):
+    die("Requires python 3.7 or later")
+
 # Inspired by https://unix.stackexchange.com/a/141496
 def main(args):
     if not hasQpdf and not has("pdftk"):
@@ -695,10 +703,6 @@ def fromCmdOutput(cmd, pattern):
     sp=subprocess.run(cmd, check=True, capture_output=True)
     result=sp.stdout.decode('utf-8')
     return m(pattern, result)
-
-def die(reason):
-    print(reason, file=sys.stderr)
-    sys.exit(1)
 
 # Monkey-patch argparse if necessary
 if not 'BooleanOptionalAction' in dir(argparse):
