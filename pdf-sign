@@ -65,41 +65,44 @@ def main(args):
             return outFile
         pageSize=Cell(lambda: pdfGetSize(pagePDF()))
         # The chosen signature
-        if args.batch:
-            if not args.signature and not args.text:
+        if args.signature:
+            if args.text:
+                die('--signature and --text cannot be specified together.')
+            if not os.path.exists(args.signature):
+                die(f'File not found: {args.signature}')
+            signatures=[('file', args.signature, args.signature)]
+        elif args.batch:
+            assert not args.signature
+            if not args.text:
                 die('In batch mode, --signature or --text must be specified.')
-            if args.text and len(args.text) > 1:
+            if len(args.text) > 1:
                 die('In batch mode, --text must be given only once.')
-        if args.signature and args.text:
-            die('--signature and --text cannot be specified together.')
-        if args.signature and not os.path.exists(args.signature):
-            die(f'File not found: {args.signature}')
-        if args.text:
-            assert(len(args.text) > 0)
-            latin1_chars=set([*range(0x20, 0x7f), *range(0xa0, 0x100)])
-            for text in args.text:
-                text_chars=set(map(ord, text))
-                if not text_chars.issubset(latin1_chars):
-                    die("Error: Only non-control latin-1 characters are supported in --text." +
-                        " Unsupported characters: " + ', '.join(map(hex, text_chars - latin1_chars)))
-        signatureDir=getSignatureDir()
-        signatures=[('file', x) for x in filter(isPdfFilename, os.listdir(signatureDir))] if not args.signature else [None]
-        if not signatures and not args.text:
-            die(f'Could not find anything usable as signature, since no .pdf files found in {signatureDir} and no --text option given.')
-        signatures.sort()
-        if args.text:
-            signatures=[('text', x) for x in args.text] + signatures
+            validateText(args.text[0], True)
+            signatures=[('text', textLabel(args.text[0]), args.text[0])]
+        else:
+            (signatureDir, signatureDirHelp)=getSignatureDirAndHelp()
+            signatures=([('file', x, os.path.join(signatureDir, x))
+                         for x in filter(isPdfFilename, os.listdir(signatureDir))]
+                        if signatureDir else [])
+            signatures.sort()
+            if not signatures and not args.text:
+                die('Could not find any usable signatures. No --signature, no --text, and ' +
+                    ('no .pdf files found in {signatureDir}.'
+                    if signatureDir else
+                    f'no signature directory. The options considered for signature directory are: {signatureDirHelp}'))
+            if args.text:
+                assert(len(args.text) > 0)
+                for text in args.text:
+                    validateText(text, True)
+                signatures=[('text', textLabel(x), x) for x in args.text] + signatures
         signatureIndex=Cell(0)
-        customText=Cell(('text', time.strftime('%Y-%m-%d')))
         @Cell
         def signaturePath():
-            if args.signature:
-                return args.signature
-            (signType, content)=signatures[signatureIndex()]
+            (signType, _, content)=signatures[signatureIndex()]
             if signType=='cell':
-                (signType, content)=content()
+                (signType, _, content)=content()
             if signType=='file':
-                return os.path.join(signatureDir, content)
+                return content
             assert signType=='text'
             cache = signaturePath._cache
             if content in cache:
@@ -220,6 +223,7 @@ def main(args):
             except ModuleNotFoundError:
                 die('Cannot find Python module `tkinter`, which is needed for interactive use.')
             doSign=False
+            customText=Cell(('text', None, time.strftime('%Y-%m-%d')))
             customTextIndex = len(signatures)
             # Commands
             def uf(fun):
@@ -260,32 +264,25 @@ def main(args):
                 text = simpledialog.askstring(
                     "Custom Text",
                     "Input the text you want to stamp this PDF file with",
-                    initialvalue=customText()[1])
+                    initialvalue=customText()[2])
                 if text == None:
                     return
                 # Validate text
-                text_chars=set(map(ord, text))
-                latin1_chars=set([*range(0x20, 0x7f), *range(0xa0, 0x100)])
-                if not text_chars.issubset(latin1_chars):
+                validateMsg = validateText(text, False)
+                if validateMsg:
                     simpledialog.messagebox.showerror(
                         parent=root,
                         title="Invalid text",
-                        message=f"Only non-control latin-1 characters are supported. Unsupported characters: {', '.join(map(hex, text_chars - latin1_chars))}"
-                    )
-                    return
-                if not (1 <= len(text) and len(text) <= 100):
-                    simpledialog.messagebox.showerror(
-                        parent=root,
-                        title="Invalid text",
-                        message="Text must be between 1 and 100 characters long."
+                        message=validateMsg
                     )
                     return
                 # Set text
-                customText(('text', text))
+                customText(('text', None, text))
                 signatureIndex(customTextIndex)
-                label='Custom text: ' + (text if len(text) <= 20 else (text[:17] + '...'))
+                label='Custom text: ' + textLabel(text)
                 placemenu.entryconfig(len(signatures) + 2, label=label)
                 update()
+            def textLabel(text): return f'"{text}"' if len(text) <= 20 else f'Custom text: "{text[:17]}"...'
             def cmd_abort():
                 root.destroy()
             def cmd_sign():
@@ -323,18 +320,18 @@ def main(args):
                     if root.signatureControlVar.get() != signatureIndex():
                         signatureIndex(root.signatureControlVar.get())
                         update()
-                for index, (_, signature) in enumerate(signatures):
+                for index, (_, signatureText, _) in enumerate(signatures):
                     placemenu.add_radiobutton(
                         value=index,
-                        label=f'{index+1}: {signature}',
+                        label=f'{index+1}: {signatureText}',
                         underline=0 if index<9 else None,
                         variable=root.signatureControlVar,
                         accelerator=(str(index+1) if index<9 else None),
                         command=updateFromSignatureRadio)
-                signatures.append(('cell', customText))
+                signatures.append(('cell', None, customText))
                 placemenu.add_radiobutton(
                     value=customTextIndex,
-                    label='Custom text: ' + customText()[1],
+                    label='Custom text: ' + textLabel(customText()[2]),
                     underline=7,
                     variable=root.signatureControlVar,
                     accelerator='T',
@@ -487,11 +484,21 @@ def qpdfOrPdftk(qpdfCmd, pdftkCmd):
     subprocess.run(cmd, check=True)
     return True # Some lambdas above rely on this
 
-def getSignatureDir():
-    (path, helptxt) = getSignatureDirAndHelp()
-    if not path:
-        die(f"Could not find a valid signature directory. The options considered are: {helptxt}")
-    return path
+def validateText(text, do_die):
+    latin1_chars=set([*range(0x20, 0x7f), *range(0xa0, 0x100)])
+    text_chars=set(map(ord, text))
+    msg = ""
+    if not text_chars.issubset(latin1_chars):
+        msg = ("Error: Only non-control latin-1 characters are supported" +
+               (" in --text" if do_die else "") +
+               ". Unsupported characters: " + ', '.join(map(hex, text_chars - latin1_chars)))
+    elif not (1 <= len(text) and len(text) <= 100):
+        msg = "Text must be between 1 and 100 characters long."
+    if not msg:
+        return None
+    if do_die:
+        die(msg)
+    return msg
 
 def getSignatureDirAndHelp():
     def candidate(prevpath, prevhelptxt, nr, lbl, envvar, path):
