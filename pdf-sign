@@ -130,6 +130,8 @@ def main(args):
             cache = translatablePDF._cache
             if path not in cache:
                 (w, h) = pdfGetSize(path)
+                if not (1 < w and 1 < h):
+                    die(f"The PDF at {path} is unusable as a signature due to too small dimensions.")
                 (double_w, double_h) = (2*w, 2*h)
                 testFile = intmp('translateTest.pdf')
                 subprocess.run([
@@ -141,7 +143,7 @@ def main(args):
                     '-f', path,
                 ], check=True)
                 (test_w, test_h) = pdfGetSize(testFile)
-                if (test_w, test_h) == (double_w, double_h):
+                if abs(test_w - double_w) < 0.01 and abs(test_h - double_h) < 0.01:
                     # The pdf file at path can be translated correctly
                     cache[path] = path
                 elif (test_w, test_h) == (w, h):
