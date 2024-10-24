@@ -65,41 +65,44 @@ def main(args):
             return outFile
         pageSize=Cell(lambda: pdfGetSize(pagePDF()))
         # The chosen signature
-        if args.batch:
-            if not args.signature and not args.text:
+        if args.signature:
+            if args.text:
+                die('--signature and --text cannot be specified together.')
+            if not os.path.exists(args.signature):
+                die(f'File not found: {args.signature}')
+            signatures=[('file', args.signature, args.signature)]
+        elif args.batch:
+            assert not args.signature
+            if not args.text:
                 die('In batch mode, --signature or --text must be specified.')
-            if args.text and len(args.text) > 1:
+            if len(args.text) > 1:
                 die('In batch mode, --text must be given only once.')
-        if args.signature and args.text:
-            die('--signature and --text cannot be specified together.')
-        if args.signature and not os.path.exists(args.signature):
-            die(f'File not found: {args.signature}')
-        if args.text:
-            assert(len(args.text) > 0)
-            latin1_chars=set([*range(0x20, 0x7f), *range(0xa0, 0x100)])
-            for text in args.text:
-                text_chars=set(map(ord, text))
-                if not text_chars.issubset(latin1_chars):
-                    die("Error: Only non-control latin-1 characters are supported in --text." +
-                        " Unsupported characters: " + ', '.join(map(hex, text_chars - latin1_chars)))
-        signatureDir=getSignatureDir()
-        signatures=[('file', x) for x in filter(isPdfFilename, os.listdir(signatureDir))] if not args.signature else [None]
-        if not signatures and not args.text:
-            die(f'Could not find anything usable as signature, since no .pdf files found in {signatureDir} and no --text option given.')
-        signatures.sort()
-        if args.text:
-            signatures=[('text', x) for x in args.text] + signatures
+            validateText(args.text[0], True)
+            signatures=[('text', textLabel(args.text[0]), args.text[0])]
+        else:
+            (signatureDir, signatureDirHelp)=getSignatureDirAndHelp()
+            signatures=([('file', x, os.path.join(signatureDir, x))
+                         for x in filter(isPdfFilename, os.listdir(signatureDir))]
+                        if signatureDir else [])
+            signatures.sort()
+            if not signatures and not args.text:
+                die('Could not find any usable signatures. No --signature, no --text, and ' +
+                    ('no .pdf files found in {signatureDir}.'
+                    if signatureDir else
+                    f'no signature directory. The options considered for signature directory are: {signatureDirHelp}'))
+            if args.text:
+                assert(len(args.text) > 0)
+                for text in args.text:
+                    validateText(text, True)
+                signatures=[('text', textLabel(x), x) for x in args.text] + signatures
         signatureIndex=Cell(0)
-        customText=Cell(('text', time.strftime('%Y-%m-%d')))
         @Cell
         def signaturePath():
-            if args.signature:
-                return args.signature
-            (signType, content)=signatures[signatureIndex()]
+            (signType, _, content)=signatures[signatureIndex()]
             if signType=='cell':
-                (signType, content)=content()
+                (signType, _, content)=content()
             if signType=='file':
-                return os.path.join(signatureDir, content)
+                return content
             assert signType=='text'
             cache = signaturePath._cache
             if content in cache:
@@ -110,13 +113,25 @@ def main(args):
             return fileName
         signaturePath._cache={}
         signatureSize=Cell(lambda: pdfGetSize(signaturePath()))
-        signaturePositionX=Cell(args.x_coordinate)
-        signaturePositionY=Cell(args.y_coordinate)
+        try:
+            xm=m("^(L\\+|L-|R\\+|R-|-|)([0-9.]+)%$", args.x_coordinate)
+            default_x=(lambda x:{'L+':x,'L-':-x,'R+':1+x,'R-':1-x,'-':-x,'':x}[xm[1]])(float(xm[2])/100)
+        except:
+            die('Invalid -x option')
+        try:
+            ym=m("^(T\\+|T-|B\\+|B-|-|)([0-9.]+)%$", args.y_coordinate)
+            default_y=(lambda y:{'T+':y,'T-':-y,'B+':1+y,'B-':1-y,'-':-y,'':y}[ym[1]])(float(ym[2])/100)
+        except:
+            die('Invalid -y option')
+        signaturePositionX=Cell(default_x)
+        signaturePositionY=Cell(default_y)
         signatureScale=Cell(0)
         def translatablePDF(path):
             cache = translatablePDF._cache
             if path not in cache:
                 (w, h) = pdfGetSize(path)
+                if not (1 < w and 1 < h):
+                    die(f"The PDF at {path} is unusable as a signature due to too small dimensions.")
                 (double_w, double_h) = (2*w, 2*h)
                 testFile = intmp('translateTest.pdf')
                 subprocess.run([
@@ -128,7 +143,7 @@ def main(args):
                     '-f', path,
                 ], check=True)
                 (test_w, test_h) = pdfGetSize(testFile)
-                if (test_w, test_h) == (double_w, double_h):
+                if abs(test_w - double_w) < 0.01 and abs(test_h - double_h) < 0.01:
                     # The pdf file at path can be translated correctly
                     cache[path] = path
                 elif (test_w, test_h) == (w, h):
@@ -159,11 +174,28 @@ def main(args):
                     die(f"The PDF at {path} is unusable as a signature. Reason unknown.")
             return cache[path]
         translatablePDF._cache={}
+        @Cell
+        def defaultResizeFactor():
+            (pageWidth, pageHeight)=pageSize()
+            try:
+                wm=m("^([0-9.]+)(pts|pt|in|cm|mm|%)$", args.width)
+                maxSignatureWidth=int(float(wm[1])*({'pts':1,'pt':1,'in':72,'cm':28.3,'mm':2.83,'%':pageWidth/100}[wm[2]]))
+            except:
+                die('Invalid -W option')
+            try:
+                hm=m("^([0-9.]+)(pts|pt|in|cm|mm|%)$", args.height)
+                maxSignatureHeight=int(float(hm[1])*({'pts':1,'pt':1,'in':72,'cm':28.3,'mm':2.83,'%':pageHeight/100}[hm[2]]))
+            except:
+                die('Invalid -H option')
+            (signatureWidth, signatureHeight)=signatureSize()
+            return min(args.resize_factor,
+                       maxSignatureWidth / signatureWidth,
+                       maxSignatureHeight / signatureHeight)
         @VolatileCell
         def signaturePositionedPDF():
             (w, h)=pageSize()
             (sw, sh)=signatureSize()
-            resize=1.1**signatureScale()*min(args.width*w/sw, args.height*h/sh)
+            resize=1.1**signatureScale()*defaultResizeFactor()
             dx=w*signaturePositionX()/resize - sw/2
             dy=h*(1-signaturePositionY())/resize - sh/2
             outFile=intmp('signature-positioned.pdf')
@@ -220,6 +252,7 @@ def main(args):
             except ModuleNotFoundError:
                 die('Cannot find Python module `tkinter`, which is needed for interactive use.')
             doSign=False
+            customText=Cell(('text', None, time.strftime('%Y-%m-%d')))
             customTextIndex = len(signatures)
             # Commands
             def uf(fun):
@@ -260,32 +293,25 @@ def main(args):
                 text = simpledialog.askstring(
                     "Custom Text",
                     "Input the text you want to stamp this PDF file with",
-                    initialvalue=customText()[1])
+                    initialvalue=customText()[2])
                 if text == None:
                     return
                 # Validate text
-                text_chars=set(map(ord, text))
-                latin1_chars=set([*range(0x20, 0x7f), *range(0xa0, 0x100)])
-                if not text_chars.issubset(latin1_chars):
+                validateMsg = validateText(text, False)
+                if validateMsg:
                     simpledialog.messagebox.showerror(
                         parent=root,
                         title="Invalid text",
-                        message=f"Only non-control latin-1 characters are supported. Unsupported characters: {', '.join(map(hex, text_chars - latin1_chars))}"
-                    )
-                    return
-                if not (1 <= len(text) and len(text) <= 100):
-                    simpledialog.messagebox.showerror(
-                        parent=root,
-                        title="Invalid text",
-                        message="Text must be between 1 and 100 characters long."
+                        message=validateMsg
                     )
                     return
                 # Set text
-                customText(('text', text))
+                customText(('text', None, text))
                 signatureIndex(customTextIndex)
-                label='Custom text: ' + (text if len(text) <= 20 else (text[:17] + '...'))
+                label='Custom text: ' + textLabel(text)
                 placemenu.entryconfig(len(signatures) + 2, label=label)
                 update()
+            def textLabel(text): return f'"{text}"' if len(text) <= 20 else f'Custom text: "{text[:17]}"...'
             def cmd_abort():
                 root.destroy()
             def cmd_sign():
@@ -323,18 +349,18 @@ def main(args):
                     if root.signatureControlVar.get() != signatureIndex():
                         signatureIndex(root.signatureControlVar.get())
                         update()
-                for index, (_, signature) in enumerate(signatures):
+                for index, (_, signatureText, _) in enumerate(signatures):
                     placemenu.add_radiobutton(
                         value=index,
-                        label=f'{index+1}: {signature}',
+                        label=f'{index+1}: {signatureText}',
                         underline=0 if index<9 else None,
                         variable=root.signatureControlVar,
                         accelerator=(str(index+1) if index<9 else None),
                         command=updateFromSignatureRadio)
-                signatures.append(('cell', customText))
+                signatures.append(('cell', None, customText))
                 placemenu.add_radiobutton(
                     value=customTextIndex,
-                    label='Custom text: ' + customText()[1],
+                    label='Custom text: ' + textLabel(customText()[2]),
                     underline=7,
                     variable=root.signatureControlVar,
                     accelerator='T',
@@ -487,11 +513,21 @@ def qpdfOrPdftk(qpdfCmd, pdftkCmd):
     subprocess.run(cmd, check=True)
     return True # Some lambdas above rely on this
 
-def getSignatureDir():
-    (path, helptxt) = getSignatureDirAndHelp()
-    if not path:
-        die(f"Could not find a valid signature directory. The options considered are: {helptxt}")
-    return path
+def validateText(text, do_die):
+    latin1_chars=set([*range(0x20, 0x7f), *range(0xa0, 0x100)])
+    text_chars=set(map(ord, text))
+    msg = ""
+    if not text_chars.issubset(latin1_chars):
+        msg = ("Error: Only non-control latin-1 characters are supported" +
+               (" in --text" if do_die else "") +
+               ". Unsupported characters: " + ', '.join(map(hex, text_chars - latin1_chars)))
+    elif not (1 <= len(text) and len(text) <= 100):
+        msg = "Text must be between 1 and 100 characters long."
+    if not msg:
+        return None
+    if do_die:
+        die(msg)
+    return msg
 
 def getSignatureDirAndHelp():
     def candidate(prevpath, prevhelptxt, nr, lbl, envvar, path):
@@ -742,10 +778,11 @@ parser = argparse.ArgumentParser(description='Sign a PDF file, with a non-crypto
 parser.add_argument('input', metavar='input.pdf', type=str, help='Input PDF file.')
 parser.add_argument('-p', '--page', type=int, default=-1, help='The page to sign, negative for counting from the end. (default: -1)')
 parser.add_argument('-s', '--signature', type=str, help=getSignatureHelp())
-parser.add_argument('-x', '--x-coordinate', type=float, default=0.5, help='Horizontal coordinate of signature center, in page width units. (default: 0.5)')
-parser.add_argument('-y', '--y-coordinate', type=float, default=0.75, help='Vertical coordinate of signature center, in page height units. (default: 0.75)')
-parser.add_argument('-W', '--width', type=float, default=0.28, help='Width of box to fit signature to, in page width units. (default: 0.28)')
-parser.add_argument('-H', '--height', type=float, default=0.11, help='Height of box to fit signature to, in page height units. (default: 0.11)')
+parser.add_argument('-x', '--x-coordinate', type=str, default="50%", help='Horizontal coordinate of signature center. Requires unit %% (meaning percent of page width). May be preceded by L+ (default), L-, R+ or R- to give coordinate relative left of right edge of the page. For example, 25%% means a quarter page width from left edge, R-3%% means 3%% of page width from right edge. (default: 50%%)')
+parser.add_argument('-y', '--y-coordinate', type=str, default="B-25%", help='Vertical coordinate of signature center. Requires unit %% (meaning percent of page height). May be preceded by T+ (default), T-, B+ or B- to give coordinate relative top or bottom edge of the page. For example, 3%% means 3%% of page height from top edge, B-10%% means 10%% of page height from bottom edge. (default: B-25%%)')
+parser.add_argument('-r', '--resize-factor', type=float, default=1.0, help='Resize signature by this factor. If this would make the signature larger than allowed by -W or -H, then instead use the maximum allowed size.')
+parser.add_argument('-W', '--width', type=str, default="50%", help='Maximum width of signature. Supports units pts, in, cm, mm and %% (meaning percent of page width). (default: 50%%)')
+parser.add_argument('-H', '--height', type=str, default="50%", help='Maximum height of signature. Supports units pts, in, cm, mm and %% (meaning percent of page height). (default: 50%%)')
 parser.add_argument('-o', '--output', type=str, help='Output file. (default: Add ".signed" before the extension)')
 parser.add_argument('-b', '--batch', action=argparse.BooleanOptionalAction, default=False, help='Batch mode: do not show GUI. (default: False)')
 parser.add_argument('-f', '--flatten', action=argparse.BooleanOptionalAction, default=True, help='Flatten before signing, preventing subsequent changes in PDF forms. (default: True)')
