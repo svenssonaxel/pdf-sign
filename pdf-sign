@@ -35,7 +35,7 @@ def main(args):
         # Maybe flatten (make forms non-editable) before signing
         if args.flatten:
             inputPDF=intmp('input.pdf')
-            qpdfOrPdftk([
+            qpdfOrPdftk(args, [
                 'qpdf',
                 '--flatten-annotations=all',
                 '--generate-appearances',
@@ -55,7 +55,7 @@ def main(args):
         @VolatileCell
         def pagePDF():
             outFile=intmp('page.pdf')
-            qpdfOrPdftk([
+            qpdfOrPdftk(args, [
                 'qpdf', '--pages', '.', f'{pageNumber()}', '--',
                 inputPDF, outFile
             ],[
@@ -161,7 +161,7 @@ def main(args):
                         '-sDEVICE=pdfwrite',
                         f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}',
                     ], check=True)
-                    qpdfOrPdftk([
+                    qpdfOrPdftk(args, [
                         'qpdf', '--overlay', path, '--',
                         emptyFileName, translatableFileName,
                     ],[
@@ -212,7 +212,7 @@ def main(args):
         @VolatileCell
         def signedPagePDF():
             outFile=intmp('signed-page.pdf')
-            qpdfOrPdftk([
+            qpdfOrPdftk(args, [
                 'qpdf', '--overlay', signaturePositionedPDF(), '--',
                 pagePDF(), outFile,
             ],[
@@ -482,7 +482,7 @@ def main(args):
                 else:
                     assert args.existing=='overwrite'
             pnr=pageNumber()
-            qpdfOrPdftk([
+            qpdfOrPdftk(args, [
                 'qpdf', '--pages',
                 *(['.', f'1-{pnr-1}'] if 1 < pnr else []),
                 signedPagePDF(), '1',
@@ -507,10 +507,21 @@ def main(args):
 def has(cmd):
     return subprocess.run(["which", cmd], check=False, capture_output=True).returncode == 0
 hasQpdf = has("qpdf")
-def qpdfOrPdftk(qpdfCmd, pdftkCmd):
+def qpdfOrPdftk(args, qpdfCmd, pdftkCmd):
     assert qpdfCmd[0] == "qpdf" and pdftkCmd[0] == "pdftk"
-    cmd = qpdfCmd if hasQpdf else pdftkCmd
-    subprocess.run(cmd, check=True)
+    if hasQpdf:
+        if args.continue_on_warnings:
+            subprocess.run(['qpdf', '--warning-exit-0', *qpdfCmd[1:]], check=True)
+        else:
+            try:
+                subprocess.run(qpdfCmd, check=True)
+            except subprocess.CalledProcessError as e:
+                if e.returncode == 3:
+                    # https://qpdf.readthedocs.io/en/stable/cli.html#exit-status
+                    die("qpdf exited with code 3, indicating warnings. Run pdf-sign with flag --continue-on-warnings to ignore.")
+                raise
+    else:
+        subprocess.run(pdftkCmd, check=True)
     return True # Some lambdas above rely on this
 
 def validateText(text, do_die):
@@ -788,5 +799,6 @@ parser.add_argument('-b', '--batch', action=argparse.BooleanOptionalAction, defa
 parser.add_argument('-f', '--flatten', action=argparse.BooleanOptionalAction, default=True, help='Flatten before signing, preventing subsequent changes in PDF forms. (default: True)')
 parser.add_argument('-e', '--existing', type=str, choices=['backup', 'overwrite', 'fail'], default='backup', help='What to do if output file exists. (default: backup)')
 parser.add_argument('-t', '--text', type=str, action='append', help='In GUI mode, a text option to be added to the list of signatures (can be repeated). In batch mode only one can be given, and will be used instead of --signature.')
+parser.add_argument('--continue-on-warnings', action=argparse.BooleanOptionalAction, default=False, help='Do not fail on warnings from qpdf. (default: False)')
 
 main(parser.parse_args(sys.argv[1:] or ['-h']))
