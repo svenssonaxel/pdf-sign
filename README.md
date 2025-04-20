@@ -37,7 +37,7 @@ Run `pdf-sign -h`, `pdf-create-empty -h` or `pdf-from-text -h` for details.
   * `gs` (Ghostscript)
   * `qpdf` or `pdftk` (at least one of them)
   * `pdfinfo`
-* Copy one or both tools to a directory in your `$PATH`.
+* Copy the tools to a directory in your `$PATH`.
 
 **Installation on Debian**
 
@@ -46,17 +46,18 @@ apt-get update
 apt-get install -y coreutils git python3 python3-tk ghostscript pdftk poppler-utils
 git clone https://github.com/svenssonaxel/pdf-sign.git
 cd pdf-sign
-cp pdf-sign pdf-create-empty pdf-from-text /usr/local/bin/
+cp pdf-* /usr/local/bin/
 ```
 
 ### Related use cases
 
 * You can add the date or other pieces of text using the `--text` CLI option or `Signature -> Custom text` menu option.
+  If you want both a date and a signature, you have to invoke `pdf-sign` twice.
 * You can convert SVG stamps/marks and add them to your signature directory. Example:
   ```
   curl -LO https://www.svgrepo.com/download/438371/checkmark-round.svg
   sudo apt-get install librsvg2-bin
-  rsvg-convert -f pdf -o ~/.pdf_signatures/check.pdf checkmark-round.svg
+  rsvg-convert -f pdf -o ~/.config/pdf_signatures/check.pdf checkmark-round.svg
   ```
 
 ## Why
