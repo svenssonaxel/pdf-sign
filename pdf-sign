@@ -367,47 +367,40 @@ def main(args):
                     command=cmd_customText)
                 placemenu.add_separator()
             placemenu.add_command(label='Enlarge signature', underline=0, accelerator='+', command=cmd_enlargeSignature)
-            root.bind_all('<KP_Add>', lambda e: cmd_enlargeSignature())
             placemenu.add_command(label='Shrink signature', underline=0, accelerator='-', command=cmd_shrinkSignature)
-            root.bind_all('<KP_Subtract>', lambda e: cmd_shrinkSignature())
             placemenu.add_separator()
             placemenu.add_command(label='Move signature left', underline=15, accelerator='Click / Left', command=cmd_moveSignatureLeft)
             placemenu.add_command(label='Move signature down', underline=15, accelerator='Click / Down', command=cmd_moveSignatureDown)
             placemenu.add_command(label='Move signature up', underline=15, accelerator='Click / Up', command=cmd_moveSignatureUp)
             placemenu.add_command(label='Move signature right', underline=15, accelerator='Click / Right', command=cmd_moveSignatureRight)
             # Key bindings
-            keyToFunction={
-                'Prior': cmd_prevPage,
-                'Next': cmd_nextPage,
-                'Home': cmd_firstPage,
-                'End': cmd_lastPage,
-                'C-Left': cmd_prevSignature,
-                'C-Right': cmd_nextSignature,
-                'Left': cmd_moveSignatureLeft,
-                'Down': cmd_moveSignatureDown,
-                'Up': cmd_moveSignatureUp,
-                'Right': cmd_moveSignatureRight,
-                'plus': cmd_enlargeSignature,
-                'minus': cmd_shrinkSignature,
-                'Escape': cmd_abort,
-                'Q': cmd_abort,
-                'q': cmd_abort,
-                'S': cmd_sign,
-                's': cmd_sign,
-                'T': cmd_customText,
-                't': cmd_customText,
-                'space': cmd_sign,
-            }
-            def onkey(event):
-                key=('C-' if event.state in [4, 5] else '')+event.keysym
-                if key in keyToFunction:
-                    keyToFunction[key]()
-            for key in keyToFunction.keys():
-                root.bind(f'<{key.split("-")[-1]}>', onkey)
-            def bindDigit(i, char):
-                keyToFunction[char]=lambda: cmd_selectSignatureByIndex(i)
-                root.bind(f'{char}', onkey)
-            for i, char in enumerate("123456789"): bindDigit(i, char)
+            def bind(fun, *keys):
+                for key in keys:
+                    root.bind(key, lambda _: fun())
+            bind(cmd_prevPage, '<Prior>')
+            bind(cmd_nextPage, '<Next>')
+            bind(cmd_firstPage, '<Home>')
+            bind(cmd_lastPage, '<End>')
+            bind(cmd_prevSignature, '<Control-Left>')
+            bind(cmd_nextSignature, '<Control-Right>')
+            bind(cmd_moveSignatureLeft, '<Left>')
+            bind(cmd_moveSignatureDown, '<Down>')
+            bind(cmd_moveSignatureUp, '<Up>')
+            bind(cmd_moveSignatureRight, '<Right>')
+            bind(cmd_enlargeSignature, '<plus>', '<KP_Add>')
+            bind(cmd_shrinkSignature, '<minus>', '<KP_Subtract>')
+            bind(cmd_abort, '<Escape>', '<Q>', '<q>')
+            bind(cmd_sign, '<space>', '<S>', '<s>')
+            bind(cmd_customText, '<T>', '<t>')
+            bind(lambda: cmd_selectSignatureByIndex(0), '1')
+            bind(lambda: cmd_selectSignatureByIndex(1), '2')
+            bind(lambda: cmd_selectSignatureByIndex(2), '3')
+            bind(lambda: cmd_selectSignatureByIndex(3), '4')
+            bind(lambda: cmd_selectSignatureByIndex(4), '5')
+            bind(lambda: cmd_selectSignatureByIndex(5), '6')
+            bind(lambda: cmd_selectSignatureByIndex(6), '7')
+            bind(lambda: cmd_selectSignatureByIndex(7), '8')
+            bind(lambda: cmd_selectSignatureByIndex(8), '9')
             # Canvas and click binding
             root._docView=tk.Canvas(root, borderwidth=0, background='#ffffff')
             docViewMargin=5
