@@ -381,8 +381,8 @@ def main(args):
                 'Next': cmd_nextPage,
                 'Home': cmd_firstPage,
                 'End': cmd_lastPage,
-                'C-Left': cmd_prevSignature,
-                'C-Right': cmd_nextSignature,
+                'Control-Left': cmd_prevSignature,
+                'Control-Right': cmd_nextSignature,
                 'Left': cmd_moveSignatureLeft,
                 'Down': cmd_moveSignatureDown,
                 'Up': cmd_moveSignatureUp,
@@ -397,17 +397,18 @@ def main(args):
                 'T': cmd_customText,
                 't': cmd_customText,
                 'space': cmd_sign,
+                '1': lambda: cmd_selectSignatureByIndex(0),
+                '2': lambda: cmd_selectSignatureByIndex(1),
+                '3': lambda: cmd_selectSignatureByIndex(2),
+                '4': lambda: cmd_selectSignatureByIndex(3),
+                '5': lambda: cmd_selectSignatureByIndex(4),
+                '6': lambda: cmd_selectSignatureByIndex(5),
+                '7': lambda: cmd_selectSignatureByIndex(6),
+                '8': lambda: cmd_selectSignatureByIndex(7),
+                '9': lambda: cmd_selectSignatureByIndex(8),
             }
-            def onkey(event):
-                key=('C-' if event.state in [4, 5] else '')+event.keysym
-                if key in keyToFunction:
-                    keyToFunction[key]()
             for key in keyToFunction.keys():
-                root.bind(f'<{key.split("-")[-1]}>', onkey)
-            def bindDigit(i, char):
-                keyToFunction[char]=lambda: cmd_selectSignatureByIndex(i)
-                root.bind(f'{char}', onkey)
-            for i, char in enumerate("123456789"): bindDigit(i, char)
+                root.bind(f'<{key}>', lambda _, fun=keyToFunction[key]: fun())
             # Canvas and click binding
             root._docView=tk.Canvas(root, borderwidth=0, background='#ffffff')
             docViewMargin=5
