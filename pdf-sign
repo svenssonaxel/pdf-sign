@@ -276,6 +276,10 @@ def main(args):
             cmd_moveSignatureDown = uf(lambda: signaturePositionY(signaturePositionY()+0.02))
             cmd_moveSignatureLeft = uf(lambda: signaturePositionX(signaturePositionX()-0.02))
             cmd_moveSignatureRight = uf(lambda: signaturePositionX(signaturePositionX()+0.02))
+            cmd_moveSignatureUpALittle = uf(lambda: signaturePositionY(signaturePositionY()-0.002))
+            cmd_moveSignatureDownALittle = uf(lambda: signaturePositionY(signaturePositionY()+0.002))
+            cmd_moveSignatureLeftALittle = uf(lambda: signaturePositionX(signaturePositionX()-0.002))
+            cmd_moveSignatureRightALittle = uf(lambda: signaturePositionX(signaturePositionX()+0.002))
             cmd_enlargeSignature = uf(lambda: signatureScale(signatureScale()+1))
             cmd_shrinkSignature = uf(lambda: signatureScale(signatureScale()-1))
             def cmd_positionSignature(x, y):
@@ -375,6 +379,11 @@ def main(args):
             placemenu.add_command(label='Move signature down', underline=15, accelerator='Click / Down', command=cmd_moveSignatureDown)
             placemenu.add_command(label='Move signature up', underline=15, accelerator='Click / Up', command=cmd_moveSignatureUp)
             placemenu.add_command(label='Move signature right', underline=15, accelerator='Click / Right', command=cmd_moveSignatureRight)
+            placemenu.add_separator()
+            placemenu.add_command(label='Move signature a little left', underline=26, accelerator='Click / Shift+Left', command=cmd_moveSignatureLeftALittle)
+            placemenu.add_command(label='Move signature a little down', underline=25, accelerator='Click / Shift+Down', command=cmd_moveSignatureDownALittle)
+            placemenu.add_command(label='Move signature a little up', underline=15, accelerator='Click / Shift+Up', command=cmd_moveSignatureUpALittle)
+            placemenu.add_command(label='Move signature a little right', underline=25, accelerator='Click / Shift+Right', command=cmd_moveSignatureRightALittle)
             # Key bindings
             keyToFunction={
                 'Prior': cmd_prevPage,
@@ -387,6 +396,10 @@ def main(args):
                 'Down': cmd_moveSignatureDown,
                 'Up': cmd_moveSignatureUp,
                 'Right': cmd_moveSignatureRight,
+                'Shift-Left': cmd_moveSignatureLeftALittle,
+                'Shift-Down': cmd_moveSignatureDownALittle,
+                'Shift-Up': cmd_moveSignatureUpALittle,
+                'Shift-Right': cmd_moveSignatureRightALittle,
                 'plus': cmd_enlargeSignature,
                 'minus': cmd_shrinkSignature,
                 'Escape': cmd_abort,
