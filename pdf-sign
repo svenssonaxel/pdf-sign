@@ -64,6 +64,7 @@ def main(args):
                 'output', outFile])
             return outFile
         pageSize=Cell(lambda: pdfGetSize(pagePDF()))
+        def textLabel(text): return f'"{text}"' if len(text) <= 20 else f'Custom text: "{text[:17]}"...'
         # The chosen signature
         if args.signature:
             if args.text:
@@ -311,7 +312,6 @@ def main(args):
                 label='Custom text: ' + textLabel(text)
                 placemenu.entryconfig(len(signatures) + 2, label=label)
                 update()
-            def textLabel(text): return f'"{text}"' if len(text) <= 20 else f'Custom text: "{text[:17]}"...'
             def cmd_abort():
                 root.destroy()
             def cmd_sign():
