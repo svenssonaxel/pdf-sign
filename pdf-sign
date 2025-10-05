@@ -141,7 +141,7 @@ def main(args):
                 s.signatures.sort()
                 if not s.signatures and not s.text:
                     die('Could not find any usable signatures. No --signature, no --text, and ' +
-                        ('no .pdf files found in {signatureDir}.'
+                        (f'no .pdf files found in {signatureDir}.'
                         if signatureDir else
                         f'no signature directory. The options considered for signature directory are: {signatureDirHelp}'))
                 if s.text:
