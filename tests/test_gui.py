@@ -102,13 +102,13 @@ def test_gui():
     sig_pdf = gen_pdf([sig], "Generated signature")
 
     # helpers
-    first_cli_args = DynVar(["-s", sig_pdf])
+    first_cli_args = DynVar(["-s", sig_pdf, "-b"])
     first_gui_args = DynVar(["-s", sig_pdf])
     def eq(cli_args, gui_args, *key_seqs):
         for keys in key_seqs:
             info(f"========== test_gui Begin case eq({cli_args}, {gui_args}, {keys})")
             assert_pdf_exactly_equal(
-                pdf_sign_cli("-bo", OUTFILE, *first_cli_args(), *cli_args, doc_pdf),
+                pdf_sign_cli("-o", OUTFILE, *first_cli_args(), *cli_args, doc_pdf),
                 pdf_sign_gui(("-o", OUTFILE, *first_gui_args(), *gui_args, doc_pdf), (*keys,)))
     def neq(except_pages, cli_args, gui_args, *key_seqs):
         assert len(except_pages) > 0, "neq must have at least one except_page_idx"
@@ -116,7 +116,7 @@ def test_gui():
         for keys in key_seqs:
             info(f"========== test_gui Begin case neq(idxs{except_page_idxs}, {cli_args}, {gui_args}, {keys})")
             assert_pdf_exactly_equal(
-                pdf_sign_cli("-bo", OUTFILE, *first_cli_args(), *cli_args, doc_pdf),
+                pdf_sign_cli("-o", OUTFILE, *first_cli_args(), *cli_args, doc_pdf),
                 pdf_sign_gui(("-o", OUTFILE, *first_gui_args(), *gui_args, doc_pdf), (*keys,)),
                 except_page_idxs=except_page_idxs)
     def aborted(*keys):
@@ -149,13 +149,15 @@ def test_gui():
     neq([2, 3], ["-p3"], ["-p2"], ["s"])
     neq([2, 3], [], ["-p2"], ["s"])
 
+    # (File -> Sign & Next is tested at the end)
+
     # File -> Abort & Exit
     aborted("Escape")
     aborted("q")
     aborted("Q")
     aborted("Alt+f", "a")
     aborted("Alt+f", "A")
-    aborted("Alt+f", "+Down", "Return")
+    aborted("Alt+f", "+Down", "+Down", "Return")
 
     # Page -> First page
     eq(["-p1"], [],
@@ -219,7 +221,7 @@ def test_gui():
     runc("cp", sig_pdf, sig_dir / "sig1.pdf")
     runc("cp", sig2_pdf, sig_dir / "sig2.pdf")
     runc("cp", sig3_pdf, sig_dir / "sig3.pdf")
-    with run_env({"PDF_SIGNATURE_DIR": str(sig_dir)}), first_cli_args([]), first_gui_args([]):
+    with run_env({"PDF_SIGNATURE_DIR": str(sig_dir)}), first_cli_args(["-b"]), first_gui_args([]):
 
         # Signature -> Previous signature
         neq([3], ["-s", sig_pdf], ["2", "s"])
@@ -409,3 +411,26 @@ def test_gui():
        ["Alt+i", "+Up", "Return", "s"])
     eq([xpt(400)], [xpt(398)],
        ["Shift+Right", "Shift+Right", "s"])
+
+    # File -> Sign & Next
+    with first_gui_args(["-s", sig_pdf, "-ns", sig2_pdf]):
+        aborted("s", "q")
+    with run_env({"PDF_SIGNATURE_DIR": str(sig_dir)}), first_cli_args([]), first_gui_args([]):
+        neq([2], ["-bs", sig_pdf, "-p1"], ["-p1", "-np2", "-s", sig2_pdf],
+            ["n", "s"],
+            ["1", "n", "3", "s"])
+        neq([3], ["-bs", sig_pdf, "-p1"], ["-s", sig_pdf, "-p1"],
+            ["n", "s"],
+            ["1", "n", "3", "s"],
+            ["2", "End", "n", "Home", "s"])
+        eq(["-bp1", "-s", sig_pdf, "-nbp2", "-s", sig2_pdf, "-nbp3", "-s", sig3_pdf], [],
+           ["Home", "n", "2", "Prior", "N", "3", "s"],
+           ["3", "n", "Home", "2", "Next", "Alt+f", "+Down", "Enter", "Home", "s"])
+        eq(["-bp1", "-s", sig_pdf, "-nbp2", "-s", sig2_pdf, "-nbp3", "-s", sig3_pdf], ["-nbp2", "-s", sig2_pdf],
+           ["Home", "n", "3", "s"],
+           ["3", "Alt+f", "n", "Home", "s"],
+           ["3", "Alt+f", "n", "Home", "s"])
+        eq(["-bp1", "-s", sig_pdf, "-x46%", "-nbp2", "-s", sig2_pdf, "-nbp3", "-s", sig3_pdf], ["-nnbp3", "-s", sig3_pdf],
+           ["Left", "Home", "Left", "1", "n", "2", "Prior", "s"])
+        eq(["-bp1", "-s", sig_pdf, "-x46%", "-nbp2", "-s", sig2_pdf, "-nbp3", "-s", sig3_pdf], ["-x44%", "-n", "-x54%", "-nbp3", "-s", sig3_pdf],
+           ["Right", "Home", "Alt+f", "N", "Left", "2", "Left", "Prior", "S"])

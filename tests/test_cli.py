@@ -380,3 +380,33 @@ def test_cli_text():
             ["In batch mode, --signature or --text must be specified"],
     ]:
         error(document_pdf = doc_pdf, msg=msg, pos_args=pos_args)
+
+# -n
+def test_cli_next():
+    rng = Rng(seed=6)
+    doc_page_count = 2
+    doc = gen_rnd_pages(seed=rng.random(), n=doc_page_count)
+    doc_pdf = gen_pdf(doc, f"Generated document with {doc_page_count} pages, {doc[0].w}x{doc[0].h} pt")
+    sig1 = Signature(seed=rng.random())
+    sig1_pdf = gen_pdf([sig1], "Generated sig1")
+    sig2 = Signature(seed=rng.random())
+    sig2_pdf = gen_pdf([sig2], "Generated sig2")
+    ops = [
+        ["sig1 on p1", (sig1, 0, 0.4, 0.75), "-s", sig1_pdf, "-p1", "-x40%"],
+        ["sig1 on p2", (sig1, 1, 0.6, 0.75), "-s", sig1_pdf, "-x60%"],
+        ["sig2 on p1", (sig2, 0, 0.6, 0.75), "-s", sig2_pdf, "-p1", "-x60%"],
+        ["sig2 on p2", (sig2, 1, 0.4, 0.75), "-s", sig2_pdf, "-x40%"],
+    ]
+    def do_test(document, description, pos_args, depth):
+        if depth > 0:
+            expected_pdf = gen_pdf(document, f"Generated document: {description}")
+            actual_pdf = intmp('pdf', f"Signed with: {' '.join(map(str, pos_args))}")
+            runc("pdf-sign", *pos_args, "-o", actual_pdf, doc_pdf)
+            assert_pdf_almost_equal(expected_pdf, actual_pdf)
+        if depth==2: return
+        for [new_desc, (sig, idx, cx, cy), *new_pos_args] in ops:
+            do_test(document=sign_pages(pages=document, signature=sig, idx=idx, cx=cx, cy=cy, r=1),
+                    description=f"{description}, {new_desc}",
+                    pos_args = [*pos_args, "-nb" if pos_args else "-b", *new_pos_args],
+                    depth = depth + 1)
+    do_test(doc, doc_pdf.name, [], 0)
