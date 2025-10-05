@@ -811,6 +811,6 @@ parser.add_argument('-b', '--batch', action=argparse.BooleanOptionalAction, defa
 parser.add_argument('-f', '--flatten', action=argparse.BooleanOptionalAction, default=True, help='Flatten before signing, preventing subsequent changes in PDF forms. (default: True)')
 parser.add_argument('-e', '--existing', type=str, choices=['backup', 'overwrite', 'fail'], default='backup', help='What to do if output file exists. (default: backup)')
 parser.add_argument('-t', '--text', type=str, action='append', help='In GUI mode, a text option to be added to the list of signatures (can be repeated). In batch mode only one can be given, and will be used instead of --signature.')
-parser.add_argument('--continue-on-warnings', action=argparse.BooleanOptionalAction, default=False, help='Do not fail on warnings from qpdf. (default: False)')
+parser.add_argument('-c', '--continue-on-warnings', action=argparse.BooleanOptionalAction, default=False, help='Do not fail on warnings from qpdf. (default: False)')
 
 main(parser.parse_args(sys.argv[1:] or ['-h']))
