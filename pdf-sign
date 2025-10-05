@@ -773,6 +773,16 @@ if not 'BooleanOptionalAction' in dir(argparse):
             return ' | '.join(self.option_strings)
     argparse.BooleanOptionalAction = BooleanOptionalAction
 
+# Custom action for --next. Snapshot current .sig_* values into a new namespace,
+# append it to .sigs, and restore the values to parser-declared defaults.
+class NextAction(argparse.Action):
+    def __call__(self, this_parser, namespace, values, option_string=None):
+        sig = argparse.Namespace()
+        for a in this_parser._actions:
+            if getattr(a, 'dest', '').startswith('sig_'):
+                setattr(sig, a.dest[4:], getattr(namespace, a.dest))
+                setattr(namespace, a.dest, a.default)
+        namespace.sigs = [*getattr(namespace, 'sigs', []), sig]
 
 def getSignatureHelp():
     (path, helptxt) = getSignatureDirAndHelp()
