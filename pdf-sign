@@ -90,9 +90,9 @@ def main(args):
             signatures.sort()
             if not signatures and not args.text:
                 die('Could not find any usable signatures. No --signature, no --text, and ' +
-                    ('no .pdf files found in {signatureDir}.'
-                    if signatureDir else
-                    f'no signature directory. The options considered for signature directory are: {signatureDirHelp}'))
+                    (f'no .pdf files found in {signatureDir}.'
+                     if signatureDir else
+                     f'no signature directory. The options considered for signature directory are: {signatureDirHelp}'))
             if args.text:
                 assert(len(args.text) > 0)
                 for text in args.text:
@@ -512,7 +512,7 @@ def main(args):
             ])
             print(f'Signed document saved as {signedFilePath}')
         else:
-            print(f'Aborted')
+            print('Aborted')
 
 def has(cmd):
     return subprocess.run(["which", cmd], check=False, capture_output=True).returncode == 0
