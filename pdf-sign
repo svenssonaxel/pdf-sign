@@ -99,7 +99,6 @@ def main(args):
             return cache[path]
         translatablePDF._cache={}
         displayMaxSize=Cell((400, 800))
-
         def initstep(i):
             s=steps[i]
             # The chosen page
@@ -108,6 +107,10 @@ def main(args):
             s.pageNumber=Cell(s.page if 0 < s.page else pageCount+s.page+1)
             @VolatileCell
             def pagePDF():
+                for j=range(1, i+1):
+                    prevStep = steps[i-j]
+                    if prevStep.pageNumber() == s.pageNumber():
+                        return prevStep.signedPagePDF()
                 outFile=intmp(f'{i}-page.pdf')
                 qpdfOrPdftk(args, [
                     'qpdf', '--pages', '.', f'{s.pageNumber()}', '--',
@@ -250,17 +253,41 @@ def main(args):
                 ], check=True)
                 return outFile
             s.displayPNG = displayPNG
+            # List of files and pages for output
+            @Cell
+            def outputList():
+                prevList = [(inputPDF, 1, pageCount)] if i==0 else steps[i-1].outputList()
+                accPages = 0
+                for j, (pdfFile, startPage, endPage) in enumerate(prevList):
+                    nofPages = endPage - startPage + 1
+                    if accPages + nofPages < s.pageNumber():
+                        accPages += nofPages
+                        continue
+                    ret = prevList[:j]
+                    if accPages + 1 < s.pageNumber():
+                        ret += [(pdfFile, startPage, startPage + s.pageNumber() - accPages - 2)]
+                    ret += [(s.signedPagePDF(), 1, 1)]
+                    if s.pageNumber() < accPages + nofPages:
+                        ret += [(pdfFile, startPage + s.pageNumber() - accPages, endPage)]
+                    ret += prevList[j+1:]
+                    return ret
+                assert False
+            s.outputList = outputList
             # Context for GUI
             s.customText=Cell(('text', None, time.strftime('%Y-%m-%d')))
             s.customTextIndex = len(s.signatures)
-
-        stepIndex = Cell(0)
+        for i in range(len(steps)):
+            initstep(i)
+        def first(items):
+            return [*items][0]
+        stepIndex = Cell(first(i for i in range(len(steps))
+                               if not steps[i].batch))
         @Cell
         def step(): return steps[stepIndex()]
 
         # GUI
         doSign=True
-        gui=not any(s.batch for s in steps)
+        gui=not all(s.batch for s in steps)
         if gui:
             try:
                 import tkinter as tk
@@ -270,8 +297,8 @@ def main(args):
             doSign=False
             # Commands
             def uf(fun):
-                def ret(s):
-                    fun(s)
+                def ret():
+                    fun(step())
                     update()
                 return ret
             @uf
@@ -292,15 +319,18 @@ def main(args):
             cmd_moveSignatureRight = uf(lambda s: s.signaturePositionX(s.signaturePositionX()+0.02))
             cmd_enlargeSignature = uf(lambda s: s.signatureScale(s.signatureScale()+1))
             cmd_shrinkSignature = uf(lambda s: s.signatureScale(s.signatureScale()-1))
-            def cmd_positionSignature(s, x, y):
+            def cmd_positionSignature(x, y):
+                s=step()
                 s.signaturePositionX(x)
                 s.signaturePositionY(y)
                 update()
-            def cmd_selectSignatureByIndex(s, i):
+            def cmd_selectSignatureByIndex(i):
+                s=step()
                 if i<len(s.signatures):
                     s.signatureIndex(i)
                     update()
-            def cmd_customText(s):
+            def cmd_customText():
+                s=step()
                 if s.signature:
                     return
                 # Get text from user
@@ -320,18 +350,24 @@ def main(args):
                     )
                     return
                 # Set text
-                customText(('text', None, text))
+                s.customText(('text', None, text))
                 s.signatureIndex(s.customTextIndex)
                 label='Custom text: ' + textLabel(text)
-                placemenu.entryconfig(len(s.signatures) + 2, label=label)
+                s.placemenu.entryconfig(len(s.signatures) + 2, label=label)
                 update()
-            #asdf
             def cmd_abort():
                 root.destroy()
             def cmd_sign():
+                # todo inactivate if not at last
                 nonlocal doSign
                 doSign=True
                 root.destroy()
+            def cmd_next():
+                # todo create new step if possible. maybe also update title and key
+                oldIndex = stepIndex()
+                stepIndex(first(i for i in range(len(steps))
+                                if oldIndex < i and not steps[i].batch))
+                update()
             # Error handling
             def tkerror(self, exc, val, tb):
                 traceback.print_exception(exc, val, tb)
@@ -344,6 +380,7 @@ def main(args):
             filemenu = tk.Menu(rootmenu, tearoff=0)
             rootmenu.add_cascade(label="File", underline=0, menu=filemenu)
             filemenu.add_command(label='Sign & Exit', underline=0, accelerator='space / S', command=cmd_sign)
+            filemenu.add_command(label='Sign & Next', underline=7, accelerator='N', command=cmd_next)
             filemenu.add_command(label='Abort & Exit', underline=0, accelerator='Esc / Q', command=cmd_abort)
             pagemenu = tk.Menu(rootmenu, tearoff=0)
             rootmenu.add_cascade(label="Page", underline=0, menu=pagemenu)
@@ -351,44 +388,50 @@ def main(args):
             pagemenu.add_command(label='Previous page', underline=0, accelerator='PgUp', command=cmd_prevPage)
             pagemenu.add_command(label='Next page', underline=0, accelerator='PgDown', command=cmd_nextPage)
             pagemenu.add_command(label='Last page', underline=0, accelerator='End', command=cmd_lastPage)
-            placemenu = tk.Menu(rootmenu, tearoff=0)
-            rootmenu.add_cascade(label="Signature", underline=1, menu=placemenu)
-            if not args.signature:
-                placemenu.add_command(label='Previous signature', underline=0, accelerator='Ctrl-Left', command=cmd_prevSignature)
-                placemenu.add_command(label='Next signature', underline=0, accelerator='Ctrl-Right', command=cmd_nextSignature)
-                placemenu.add_separator()
-                root.signatureControlVar=tk.IntVar()
-                root.signatureControlVar.set(signatureIndex())
-                def updateFromSignatureRadio():
-                    if root.signatureControlVar.get() != signatureIndex():
-                        signatureIndex(root.signatureControlVar.get())
-                        update()
-                for index, (_, signatureText, _) in enumerate(signatures):
-                    placemenu.add_radiobutton(
-                        value=index,
-                        label=f'{index+1}: {signatureText}',
-                        underline=0 if index<9 else None,
-                        variable=root.signatureControlVar,
-                        accelerator=(str(index+1) if index<9 else None),
-                        command=updateFromSignatureRadio)
-                signatures.append(('cell', None, customText))
-                placemenu.add_radiobutton(
-                    value=customTextIndex,
-                    label='Custom text: ' + textLabel(customText()[2]),
-                    underline=7,
-                    variable=root.signatureControlVar,
-                    accelerator='T',
-                    command=cmd_customText)
-                placemenu.add_separator()
-            placemenu.add_command(label='Enlarge signature', underline=0, accelerator='+', command=cmd_enlargeSignature)
-            root.bind_all('<KP_Add>', lambda e: cmd_enlargeSignature())
-            placemenu.add_command(label='Shrink signature', underline=0, accelerator='-', command=cmd_shrinkSignature)
-            root.bind_all('<KP_Subtract>', lambda e: cmd_shrinkSignature())
-            placemenu.add_separator()
-            placemenu.add_command(label='Move signature left', underline=15, accelerator='Click / Left', command=cmd_moveSignatureLeft)
-            placemenu.add_command(label='Move signature down', underline=15, accelerator='Click / Down', command=cmd_moveSignatureDown)
-            placemenu.add_command(label='Move signature up', underline=15, accelerator='Click / Up', command=cmd_moveSignatureUp)
-            placemenu.add_command(label='Move signature right', underline=15, accelerator='Click / Right', command=cmd_moveSignatureRight)
+            def updateMenu():
+                s=step()
+                assert not s.batch
+                if not hasattr(s, 'placemenu'):
+                    s.placemenu = tk.Menu(rootmenu, tearoff=0)
+                    placemenu = s.placemenu
+                    if not s.signature:
+                        placemenu.add_command(label='Previous signature', underline=0, accelerator='Ctrl-Left', command=cmd_prevSignature)
+                        placemenu.add_command(label='Next signature', underline=0, accelerator='Ctrl-Right', command=cmd_nextSignature)
+                        placemenu.add_separator()
+                        s.signatureControlVar=tk.IntVar()
+                        s.signatureControlVar.set(s.signatureIndex())
+                        def updateFromSignatureRadio():
+                            if s.signatureControlVar.get() != s.signatureIndex():
+                                s.signatureIndex(s.signatureControlVar.get())
+                                update()
+                        for index, (_, signatureText, _) in enumerate(s.signatures):
+                            placemenu.add_radiobutton(
+                                value=index,
+                                label=f'{index+1}: {signatureText}',
+                                underline=0 if index<9 else None,
+                                variable=s.signatureControlVar,
+                                accelerator=(str(index+1) if index<9 else None),
+                                command=updateFromSignatureRadio)
+                        s.signatures.append(('cell', None, s.customText))
+                        placemenu.add_radiobutton(
+                            value=s.customTextIndex,
+                            label='Custom text: ' + textLabel(s.customText()[2]),
+                            underline=7,
+                            variable=s.signatureControlVar,
+                            accelerator='T',
+                            command=cmd_customText)
+                        placemenu.add_separator()
+                    placemenu.add_command(label='Enlarge signature', underline=0, accelerator='+', command=cmd_enlargeSignature)
+                    root.bind_all('<KP_Add>', lambda e: cmd_enlargeSignature())
+                    placemenu.add_command(label='Shrink signature', underline=0, accelerator='-', command=cmd_shrinkSignature)
+                    root.bind_all('<KP_Subtract>', lambda e: cmd_shrinkSignature())
+                    placemenu.add_separator()
+                    placemenu.add_command(label='Move signature left', underline=15, accelerator='Click / Left', command=cmd_moveSignatureLeft)
+                    placemenu.add_command(label='Move signature down', underline=15, accelerator='Click / Down', command=cmd_moveSignatureDown)
+                    placemenu.add_command(label='Move signature up', underline=15, accelerator='Click / Up', command=cmd_moveSignatureUp)
+                    placemenu.add_command(label='Move signature right', underline=15, accelerator='Click / Right', command=cmd_moveSignatureRight)
+                rootmenu.delete(3) # This is ok whether or not it exists
+                rootmenu.add_cascade(label="Signature", underline=1, menu=s.placemenu)
             # Key bindings
             keyToFunction={
                 'Prior': cmd_prevPage,
@@ -408,6 +451,8 @@ def main(args):
                 'q': cmd_abort,
                 'S': cmd_sign,
                 's': cmd_sign,
+                'N': cmd_next,
+                'n': cmd_next,
                 'T': cmd_customText,
                 't': cmd_customText,
                 'space': cmd_sign,
@@ -443,7 +488,9 @@ def main(args):
             root.geometry(f"{int(initWinSize[0])}x{int(initWinSize[1])}")
             @Cell
             def updateTitle():
-                root.title(f'Signing page {pageNumber()}/{pageCount} of {filePath}')
+                s=step()
+                root.title(f'Signing page {s.pageNumber()}/{pageCount} of {filePath}')
+            @Cell
             # The update function triggers heavy PDF file operations, so we try
             # to avoid calling it too much. In particular,
             # 1) Depending on desktop environment and window manager, one or
@@ -469,6 +516,7 @@ def main(args):
                 root._docView.itemconfig(root._docViewIndex, image=root._docImg)
                 root._docView.configure(width=w, height=h)
                 updateTitle()
+                updateMenu()
                 if not args.signature:
                     if root.signatureControlVar.get() != signatureIndex():
                         root.signatureControlVar.set(signatureIndex())
@@ -498,23 +546,30 @@ def main(args):
                     die(f'Output file {signedFilePath} already exists')
                 else:
                     assert args.existing=='overwrite'
-            pnr=pageNumber()
+            s=step()
+            ol=s.outputList()
+            def numToHandle(n):
+                return ''.join([chr(ord(x)+0x11) for x in str(n)])
+            qpdf_pages = []
+            pdftk_handles = []
+            pdftk_pages = []
+            for idx, (path, fromPage, toPage) in ol:
+                qpdf_pages.append('.' if path==inputPDF else path)
+                qpdf_pages.append(f'{fromPage}-{toPage}')
+                pdftk_handle = f'P{numToHandle(idx)}'
+                pdftk_handles.append(f'{handle}={path}')
+                pdftk_pages.append(f'{handle}{fromPage}-{toPage}')
             qpdfOrPdftk(args, [
-                'qpdf', '--pages',
-                *(['.', f'1-{pnr-1}'] if 1 < pnr else []),
-                signedPagePDF(), '1',
-                *(['.', f'{pnr+1}-z'] if pnr < pageCount else []),
+                'qpdf',
+                '--pages', *qpdf_pages,
                 '--',
                 inputPDF,
                 signedFilePath,
             ],[
                 'pdftk',
-                f'A={inputPDF}',
-                f'B={signedPagePDF()}',
+                *pdftk_handles,
                 'cat',
-                *([f'A1-{pnr-1}'] if 1 < pnr else []),
-                'B',
-                *([f'A{pnr+1}-end'] if pnr < pageCount else []),
+                *ptk_pages,
                 'output', signedFilePath,
             ])
             print(f'Signed document saved as {signedFilePath}')
