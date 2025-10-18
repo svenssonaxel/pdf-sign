@@ -52,7 +52,7 @@ cp pdf-* /usr/local/bin/
 ### Related use cases
 
 * You can add the date or other pieces of text using the `--text` CLI option or `Signature -> Custom text` menu option.
-  If you want both a date and a signature, you have to invoke `pdf-sign` twice.
+  If you want both a date and a signature, you can use `--next` or `File -> Sign & Next`.
 * You can convert SVG stamps/marks and add them to your signature directory. Example:
   ```
   curl -LO https://www.svgrepo.com/download/438371/checkmark-round.svg
