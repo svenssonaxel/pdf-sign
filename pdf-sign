@@ -107,7 +107,7 @@ def main(args):
             s.pageNumber=Cell(s.page if 0 < s.page else pageCount+s.page+1)
             @VolatileCell
             def pagePDF():
-                for j=range(1, i+1):
+                for j in range(1, i+1):
                     prevStep = steps[i-j]
                     if prevStep.pageNumber() == s.pageNumber():
                         return prevStep.signedPagePDF()
@@ -171,12 +171,12 @@ def main(args):
             signaturePath._cache={}
             signatureSize=Cell(lambda: pdfGetSize(signaturePath()))
             try:
-                xm=m("^(L\\+|L-|R\\+|R-|-|)([0-9.]+)%$", args.x_coordinate)
+                xm=m("^(L\\+|L-|R\\+|R-|-|)([0-9.]+)%$", s.x_coordinate)
                 default_x=(lambda x:{'L+':x,'L-':-x,'R+':1+x,'R-':1-x,'-':-x,'':x}[xm[1]])(float(xm[2])/100)
             except:
                 die('Invalid -x option')
             try:
-                ym=m("^(T\\+|T-|B\\+|B-|-|)([0-9.]+)%$", args.y_coordinate)
+                ym=m("^(T\\+|T-|B\\+|B-|-|)([0-9.]+)%$", s.y_coordinate)
                 default_y=(lambda y:{'T+':y,'T-':-y,'B+':1+y,'B-':1-y,'-':-y,'':y}[ym[1]])(float(ym[2])/100)
             except:
                 die('Invalid -y option')
@@ -276,6 +276,8 @@ def main(args):
             # Context for GUI
             s.customText=Cell(('text', None, time.strftime('%Y-%m-%d')))
             s.customTextIndex = len(s.signatures)
+            if not s.batch:
+                s.is_last_interactive = all(step.batch for step in steps[i+1:])
         for i in range(len(steps)):
             initstep(i)
         def first(items):
@@ -310,7 +312,7 @@ def main(args):
                 if s.pageNumber()<pageCount:
                     s.pageNumber(s.pageNumber()+1)
             cmd_firstPage = uf(lambda s: s.pageNumber(1))
-            cmd_lastPage = uf(lambda: s: s.pageNumber(pageCount))
+            cmd_lastPage = uf(lambda s: s.pageNumber(pageCount))
             cmd_nextSignature = uf(lambda s: s.signatureIndex((s.signatureIndex()+1)%len(s.signatures)))
             cmd_prevSignature = uf(lambda s: s.signatureIndex((s.signatureIndex()-1)%len(s.signatures)))
             cmd_moveSignatureUp = uf(lambda s: s.signaturePositionY(s.signaturePositionY()-0.02))
@@ -358,12 +360,17 @@ def main(args):
             def cmd_abort():
                 root.destroy()
             def cmd_sign():
-                # todo inactivate if not at last
+                if not step().is_last_interactive:
+                    return
                 nonlocal doSign
                 doSign=True
                 root.destroy()
             def cmd_next():
-                # todo create new step if possible. maybe also update title and key
+                s=step()
+                if s.is_last_interactive:
+                    s.is_last_interactive = False
+                    steps.append(args.new_sig_step())
+                    initstep(len(steps)-1)
                 oldIndex = stepIndex()
                 stepIndex(first(i for i in range(len(steps))
                                 if oldIndex < i and not steps[i].batch))
@@ -432,6 +439,7 @@ def main(args):
                     placemenu.add_command(label='Move signature right', underline=15, accelerator='Click / Right', command=cmd_moveSignatureRight)
                 rootmenu.delete(3) # This is ok whether or not it exists
                 rootmenu.add_cascade(label="Signature", underline=1, menu=s.placemenu)
+                filemenu.entryconfig(0, state="normal" if s.is_last_interactive else "disabled")
             # Key bindings
             keyToFunction={
                 'Prior': cmd_prevPage,
@@ -483,14 +491,13 @@ def main(args):
             root._docViewIndex=root._docView.create_image(0, 0, anchor=tk.NW)
             root.bind('<Configure>', onRootResize)
             initWinSize=(root.winfo_screenwidth() * 0.8, root.winfo_screenheight() * 0.8)
-            initWinSize=(min(initWinSize[0], initWinSize[1] * pageSize()[0] / pageSize()[1]),
-                         min(initWinSize[1], initWinSize[0] * pageSize()[1] / pageSize()[0]))
+            initWinSize=(min(initWinSize[0], initWinSize[1] * step().pageSize()[0] / step().pageSize()[1]),
+                         min(initWinSize[1], initWinSize[0] * step().pageSize()[1] / step().pageSize()[0]))
             root.geometry(f"{int(initWinSize[0])}x{int(initWinSize[1])}")
             @Cell
             def updateTitle():
                 s=step()
                 root.title(f'Signing page {s.pageNumber()}/{pageCount} of {filePath}')
-            @Cell
             # The update function triggers heavy PDF file operations, so we try
             # to avoid calling it too much. In particular,
             # 1) Depending on desktop environment and window manager, one or
@@ -517,9 +524,9 @@ def main(args):
                 root._docView.configure(width=w, height=h)
                 updateTitle()
                 updateMenu()
-                if not args.signature:
-                    if root.signatureControlVar.get() != signatureIndex():
-                        root.signatureControlVar.set(signatureIndex())
+                if not s.signature:
+                    if s.signatureControlVar.get() != s.signatureIndex():
+                        s.signatureControlVar.set(s.signatureIndex())
             def onclick(event):
                 x=event.x
                 y=event.y
@@ -553,12 +560,12 @@ def main(args):
             qpdf_pages = []
             pdftk_handles = []
             pdftk_pages = []
-            for idx, (path, fromPage, toPage) in ol:
+            for idx, (path, fromPage, toPage) in enumerate(ol):
                 qpdf_pages.append('.' if path==inputPDF else path)
                 qpdf_pages.append(f'{fromPage}-{toPage}')
                 pdftk_handle = f'P{numToHandle(idx)}'
-                pdftk_handles.append(f'{handle}={path}')
-                pdftk_pages.append(f'{handle}{fromPage}-{toPage}')
+                pdftk_handles.append(f'{pdftk_handle}={path}')
+                pdftk_pages.append(f'{pdftk_handle}{fromPage}-{toPage}')
             qpdfOrPdftk(args, [
                 'qpdf',
                 '--pages', *qpdf_pages,
@@ -569,7 +576,7 @@ def main(args):
                 'pdftk',
                 *pdftk_handles,
                 'cat',
-                *ptk_pages,
+                *pdftk_pages,
                 'output', signedFilePath,
             ])
             print(f'Signed document saved as {signedFilePath}')
@@ -893,4 +900,12 @@ parser.add_argument('-n', '--next', action=NextAction, help='To add multiple sig
 parsed_args = parser.parse_args((sys.argv[1:] or ['-h']) + ['-n'])
 for a in sig_actions(parser):
     delattr(parsed_args, a.dest)
+
+def new_sig_step():
+    sig = argparse.Namespace()
+    for a in sig_actions(parser):
+        setattr(sig, a.dest, a.default)
+    return sig
+parsed_args.new_sig_step = new_sig_step
+
 main(parsed_args)
