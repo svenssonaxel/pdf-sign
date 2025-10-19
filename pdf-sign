@@ -81,7 +81,7 @@ def main(args):
             signatures=[('text', textLabel(args.text[0]), args.text[0])]
         else:
             (signatureDir, signatureDirHelp)=getSignatureDirAndHelp()
-            signatures=([('file', x, os.path.join(signatureDir, x))
+            signatures=([('file', removePdfSuffix(x), os.path.join(signatureDir, x))
                          for x in filter(isPdfFilename, os.listdir(signatureDir))]
                         if signatureDir else [])
             signatures.sort()
@@ -753,6 +753,8 @@ def m(pattern, string):
 
 def isPdfFilename(filename):
     return m(r"^.*\.[Pp][Dd][Ff]$", filename)
+def removePdfSuffix(filename):
+    return m(r"^(.*)\.[Pp][Dd][Ff]$", filename)[1]
 
 def fromCmdOutput(cmd, pattern):
     sp=subprocess.run(cmd, check=True, capture_output=True)
