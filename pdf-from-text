@@ -5,7 +5,7 @@
 import argparse, os, re, subprocess, sys, tempfile
 
 def main():
-    parser = argparse.ArgumentParser(description="Create a correctly cropped PDF from one line of text. Only Latin-1 character set is supported.")
+    parser = OurArgumentParser(description="Create a correctly cropped PDF from one line of text. Only Latin-1 character set is supported.")
     parser.add_argument("-t", "--text", required=True, help="Text to be converted to PDF.")
     parser.add_argument("-o", "--output", required=True, help="Output PDF file.")
     parser.add_argument("-s", "--size", type=int, default=12, help="Font size in points (default 12).")
@@ -92,11 +92,19 @@ def m(pattern, string):
 
 def die(reason):
     print(reason, file=sys.stderr)
-    sys.exit(2)
+    sys.exit(1)
 
 pyver = sys.version_info
 if not (pyver.major == 3 and pyver.minor >= 7):
     die("Requires python 3.7 or later")
+
+# Override exit code 2 -> 1.
+# This could have been achieved by ArgumentParser(..., exit_on_error=False), but
+# that option doesn't exist in all supported python versions.
+class OurArgumentParser(argparse.ArgumentParser):
+    def exit(self, status=0, message=None):
+        if status == 2: status = 1
+        super().exit(status=status, message=message)
 
 if __name__ == "__main__":
     main()
