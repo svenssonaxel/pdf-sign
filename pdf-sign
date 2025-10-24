@@ -239,7 +239,9 @@ def main(args):
             except ModuleNotFoundError:
                 die('Cannot find Python module `tkinter`, which is needed for interactive use.')
             doSign=False
-            customText=Cell(('text', None, time.strftime('%Y-%m-%d')))
+            customText=Cell(('text', None, os.environ.get(
+                "PDF_SIGN_UNDOCUMENTED_OVERRIDE_DEFAULT_CUSTOM_TEXT",
+                time.strftime('%Y-%m-%d'))))
             customTextIndex = len(signatures)
             # Commands
             def uf(fun):

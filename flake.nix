@@ -21,14 +21,20 @@
         python3_with_tk = pkgs.python3.withPackages (ps: with ps; [ tkinter ]);
         qpdf_or_pdftk = pkgs.qpdf;
       };
+      packages = (import ./nix/packages.nix default_deps)
+                 // { readme-gifs = readme-gifs.package; };
+      readme-gifs = import ./readme-assets/generate/generate-gifs.nix {
+        inherit pkgs;
+        inherit (packages) pdf-sign;
+      };
     in {
-      packages = (import ./nix/packages.nix) default_deps;
+      inherit packages;
       checks = (import ./tests/checks.nix) {
         inherit
           default_deps
           pkgs
           system
         ;
-      };
+      } // { readme-gifs = readme-gifs.check; };
     });
 }
