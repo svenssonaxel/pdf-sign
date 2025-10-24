@@ -5,7 +5,7 @@
 A tool to sign PDF files, with Linux support.
 We are here referring to the visible, non-cryptographic squiggles.
 
-![](README-example-use.gif)
+![](readme-assets/example-use.gif)
 
 ## How
 
@@ -17,7 +17,7 @@ The recommended way is:
   You can for example use Okular's Freehand Line, or transfer it to your smartphone and use Adobe Acrobat Reader.
   Keep in mind that it's the center of this mini-page that will be used for positioning the signature.
 
-  <img src="README-example-signature.gif" width="250"/>
+  <img src="readme-assets/example-signature.gif" width="250"/>
 
   It's a good idea to write your signature on an imagined line through the center of the mini-page.
   That way, it can be positioned correctly by clicking on the signature line.
