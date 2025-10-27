@@ -332,6 +332,7 @@ def main(args):
             tk.Tk.report_callback_exception = tkerror
             # Window and menu
             root = tk.Tk(className="pdf-sign")
+            fix_scaling(root)
             rootmenu = tk.Menu(root)
             root.config(menu=rootmenu)
             filemenu = tk.Menu(rootmenu, tearoff=0)
@@ -763,6 +764,19 @@ def fromCmdOutput(cmd, pattern):
     sp=subprocess.run(cmd, check=True, capture_output=True)
     result=sp.stdout.decode('utf-8')
     return m(pattern, result)
+
+# Copied from idlelib.run (Python standard library).
+# Copied in order to avoid importing idlelib.run since that creates a ~/.idlerc directory.
+def fix_scaling(root):
+    """Scale fonts on HiDPI displays."""
+    import tkinter.font
+    scaling = float(root.tk.call('tk', 'scaling'))
+    if scaling > 1.4:
+        for name in tkinter.font.names(root):
+            font = tkinter.font.Font(root=root, name=name, exists=True)
+            size = int(font['size'])
+            if size < 0:
+                font['size'] = round(-0.75*size)
 
 # Monkey-patch argparse if necessary
 if not 'BooleanOptionalAction' in dir(argparse):
