@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
 # Dependencies:
-# - python3.7 or later with module tkinter
+# - python3.7 or later.
+# - Python module `tkinter` (only needed for interactive use)
 # - gs (Ghostscript)
 # - qpdf or pdftk (pdf-sign will use pdftk if qpdf cannot be found)
 # - pdfinfo.
+# - which.
 
 import argparse, os, queue, re, subprocess, sys, tempfile, traceback, time
 

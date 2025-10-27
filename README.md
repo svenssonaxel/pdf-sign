@@ -37,6 +37,7 @@ Run `pdf-sign -h`, `pdf-create-empty -h` or `pdf-from-text -h` for details.
   * `gs` (Ghostscript)
   * `qpdf` or `pdftk` (at least one of them)
   * `pdfinfo`
+  * `which`
 * Copy the tools to a directory in your `$PATH`.
 
 **Installation on Debian**
