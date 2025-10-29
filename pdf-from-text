@@ -13,6 +13,8 @@ def main():
     args = parser.parse_args()
     text_to_pdf(args.text, args.output, args.size, args.margin)
 
+CONTINUE_ON_WARNINGS = False
+
 # Keep this function in sync with pdf-sign
 def text_to_pdf(text, output, size, margin):
     # Validate text
@@ -53,7 +55,8 @@ def text_to_pdf(text, output, size, margin):
             "gs", '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
             "-sDEVICE=bbox",
             ps_file
-        ], stderr=subprocess.PIPE, text=True, check=True)
+        ], capture_output=True, text=True, check=True)
+        assert bbox_result.stdout == ""
         bbox = m(r'.*%%HiResBoundingBox: (\d+(\.\d+)?) (\d+(\.\d+)?) (\d+(\.\d+)?) (\d+(\.\d+)?)\n.*', bbox_result.stderr)
         if not bbox:
             die("Error: Unable to extract bounding box.")
@@ -67,17 +70,19 @@ def text_to_pdf(text, output, size, margin):
         # Write postscript file with correct bounding box
         write_ps()
         # Convert to PDF
-        gs_cmd = [
-            "gs", '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
-            "-o", output,
-            "-sDEVICE=pdfwrite",
-            f"-dDEVICEWIDTHPOINTS={w}",
-            f"-dDEVICEHEIGHTPOINTS={h}",
-            "-dFIXEDMEDIA",
-            "-c", "[ /PAGES pdfmark",
-            "-f", ps_file
-        ]
-        subprocess.run(gs_cmd, check=True, stdout=subprocess.DEVNULL)
+        runc("gs", '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+             "-o", output,
+             "-sDEVICE=pdfwrite",
+             f"-dDEVICEWIDTHPOINTS={w}",
+             f"-dDEVICEHEIGHTPOINTS={h}",
+             "-dFIXEDMEDIA",
+             "-c", "[ /PAGES pdfmark",
+             "-f", ps_file)
+
+def runc(*cmd):
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    assert proc.stdout == ""
+    assert proc.stderr == ""
 
 def m(pattern, string):
     match = re.match(pattern, string, re.DOTALL)

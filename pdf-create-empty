@@ -21,12 +21,14 @@ def main(args):
         h=int(float(dm[3])*({'pts':1,'pt':1,'in':72,'cm':28.3,'mm':2.83}[dm[4]]))
     except:
         die('Invalid dimensions')
-    subprocess.run([
+    pdf_proc = subprocess.run([
         'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
         f'-sOutputFile={o}',
         '-sDEVICE=pdfwrite',
         f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}',
-    ], check=True)
+    ], capture_output=True, text=True, check=True)
+    assert pdf_proc.stdout == ""
+    assert pdf_proc.stderr == ""
     print(f'Wrote a pdf file with dimensions {w}x{h} pts to {o}')
 
 def m(pattern, string):
