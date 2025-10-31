@@ -191,6 +191,7 @@ def main(args):
             except:
                 die('Invalid -H option')
             (signatureWidth, signatureHeight)=signatureSize()
+            if not (0 < args.resize_factor): die('Invalid -r option')
             return min(args.resize_factor,
                        maxSignatureWidth / signatureWidth,
                        maxSignatureHeight / signatureHeight)
