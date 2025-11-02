@@ -185,12 +185,12 @@ def main(args):
             (pageWidth, pageHeight)=pageSize()
             try:
                 wm=m("^([0-9.]+)(pts|pt|in|cm|mm|%)$", args.width)
-                maxSignatureWidth=int(float(wm[1])*({'pts':1,'pt':1,'in':72,'cm':28.3,'mm':2.83,'%':pageWidth/100}[wm[2]]))
+                maxSignatureWidth=float(wm[1])*({'pts':1,'pt':1,'in':72,'cm':72/2.54,'mm':72/25.4,'%':pageWidth/100}[wm[2]])
             except:
                 die('Invalid -W option')
             try:
                 hm=m("^([0-9.]+)(pts|pt|in|cm|mm|%)$", args.height)
-                maxSignatureHeight=int(float(hm[1])*({'pts':1,'pt':1,'in':72,'cm':28.3,'mm':2.83,'%':pageHeight/100}[hm[2]]))
+                maxSignatureHeight=float(hm[1])*({'pts':1,'pt':1,'in':72,'cm':72/2.54,'mm':72/25.4,'%':pageHeight/100}[hm[2]])
             except:
                 die('Invalid -H option')
             (signatureWidth, signatureHeight)=signatureSize()
@@ -838,8 +838,8 @@ parser.add_argument('-s', '--signature', type=str, help=getSignatureHelp())
 parser.add_argument('-x', '--x-coordinate', type=str, default="50%", help='Horizontal coordinate of signature center. Requires unit %% (meaning percent of page width). May be preceded by L+ (default), L-, R+ or R- to give coordinate relative left of right edge of the page. For example, 25%% means a quarter page width from left edge, R-3%% means 3%% of page width from right edge. (default: 50%%)')
 parser.add_argument('-y', '--y-coordinate', type=str, default="B-25%", help='Vertical coordinate of signature center. Requires unit %% (meaning percent of page height). May be preceded by T+ (default), T-, B+ or B- to give coordinate relative top or bottom edge of the page. For example, 3%% means 3%% of page height from top edge, B-10%% means 10%% of page height from bottom edge. (default: B-25%%)')
 parser.add_argument('-r', '--resize-factor', type=float, default=1.0, help='Resize signature by this factor. If this would make the signature larger than allowed by -W or -H, then instead use the maximum allowed size.')
-parser.add_argument('-W', '--width', type=str, default="50%", help='Maximum width of signature. Supports units pts, in, cm, mm and %% (meaning percent of page width). (default: 50%%)')
-parser.add_argument('-H', '--height', type=str, default="50%", help='Maximum height of signature. Supports units pts, in, cm, mm and %% (meaning percent of page height). (default: 50%%)')
+parser.add_argument('-W', '--width', type=str, default="50%", help='Maximum width of signature. Supports units pt, in, cm, mm and %% (meaning percent of page width). (default: 50%%)')
+parser.add_argument('-H', '--height', type=str, default="50%", help='Maximum height of signature. Supports units pt, in, cm, mm and %% (meaning percent of page height). (default: 50%%)')
 parser.add_argument('-o', '--output', type=str, help='Output file. (default: Add ".signed" before the extension)')
 parser.add_argument('-b', '--batch', action=argparse.BooleanOptionalAction, default=False, help='Batch mode: do not show GUI. (default: False)')
 parser.add_argument('-f', '--flatten', action=argparse.BooleanOptionalAction, default=True, help='Flatten before signing, preventing subsequent changes in PDF forms. (default: True)')
