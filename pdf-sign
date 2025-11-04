@@ -8,7 +8,7 @@
 # - pdfinfo.
 # - which.
 
-import argparse, os, queue, re, subprocess, sys, tempfile, traceback, time
+import argparse, math, os, queue, re, subprocess, sys, tempfile, traceback, time
 
 def die(reason):
     print(reason, file=sys.stderr)
@@ -116,7 +116,7 @@ def main(args):
             if content in cache:
                 return cache[content]
             fileName=intmp(f"text{len(cache)}.pdf")
-            text_to_pdf(content, fileName, 12, 1)
+            text_to_pdf(content, fileName, 12, 1, True)
             cache[content]=fileName
             return fileName
         signaturePath._cache={}
@@ -670,7 +670,9 @@ class VolatileCell(Cell):
         return (self._value, self._precedentvalues)
 
 # Keep this function in sync with pdf-from-text
-def text_to_pdf(text, output, size, margin):
+def text_to_pdf(text, output, size, margin, center_baseline):
+    # Use a standard PostScript / PDF font to avoid a dependency.
+    FONT = "Times-Roman"
     # Validate text
     text_chars=set(map(ord, text))
     latin1_chars=set([*range(0x20, 0x7f), *range(0xa0, 0x100)])
@@ -680,11 +682,12 @@ def text_to_pdf(text, output, size, margin):
     with tempfile.TemporaryDirectory() as tempdir:
         # Write postscript file
         ps_file=os.path.join(tempdir, "file.ps")
+        big=3*size # Arbitrary big-enough number
         text_len=len(text)
-        w=text_len * size + margin * 2
-        h=size * 3 + margin * 2
-        x=size + margin
-        y=size + margin
+        w=text_len * big
+        h=big * 3
+        x=big
+        y=big
         ps_text = (text
                    .replace("\\", "\\\\")
                    .replace("(", "\\(")
@@ -698,7 +701,7 @@ def text_to_pdf(text, output, size, margin):
                     "%%Pages: 1",
                     "%%EndComments",
                     "%%Page: 1 1",
-                    f"/DejaVuSansMono findfont {size} scalefont setfont",
+                    f"/{FONT} findfont {size} scalefont setfont",
                     f"{x} {y} moveto",
                     f"({ps_text}) show",
                     "showpage"]))
@@ -714,13 +717,18 @@ def text_to_pdf(text, output, size, margin):
         bbox = m(r'.*%%HiResBoundingBox: (\d+(\.\d+)?) (\d+(\.\d+)?) (\d+(\.\d+)?) (\d+(\.\d+)?)\n.*', bbox_result.stderr)
         if not bbox:
             die("Error: Unable to extract bounding box.")
-        # Adjust variables for bounding box
+        # Adjust bounding box
         llx, lly, urx, ury = float(bbox[1]), float(bbox[3]), float(bbox[5]), float(bbox[7])
-        llx, lly, urx, ury = llx - margin, lly - margin, urx + margin, ury + margin
-        w=urx - llx
-        h=ury - lly
-        x-=llx
-        y-=lly
+        llx-=big; lly-=big; urx-=big; ury-=big # Undo initial text translation
+        assert llx < urx and lly < ury # Sanity check
+        w=math.ceil(2*margin + urx - llx) # Smallest int that can contain text and margins
+        x=(w - urx + llx) / 2 - llx # Center text horizontally
+        if center_baseline:
+            h=math.ceil(2 * (margin + max(abs(lly), abs(ury)))) # Smallest int that can contain text and margin with centered baseline
+            y=h/2 # Center baseline vertically
+        else:
+            h=math.ceil(2*margin + ury - lly) # Smallest int that can contain text and margins
+            y=(h - ury + lly) / 2 - lly # Center text vertically
         # Write postscript file with correct bounding box
         write_ps()
         # Convert to PDF
