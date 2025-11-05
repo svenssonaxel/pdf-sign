@@ -121,18 +121,8 @@ def main(args):
             return fileName
         signaturePath._cache={}
         signatureSize=Cell(lambda: pdfGetSize(signaturePath()))
-        try:
-            xm=m("^(L\\+|L-|R\\+|R-|-|)([0-9.]+)%$", args.x_coordinate)
-            default_x=(lambda x:{'L+':x,'L-':-x,'R+':1+x,'R-':1-x,'-':-x,'':x}[xm[1]])(float(xm[2])/100)
-        except:
-            die('Invalid -x option')
-        try:
-            ym=m("^(T\\+|T-|B\\+|B-|-|)([0-9.]+)%$", args.y_coordinate)
-            default_y=(lambda y:{'T+':y,'T-':-y,'B+':1+y,'B-':1-y,'-':-y,'':y}[ym[1]])(float(ym[2])/100)
-        except:
-            die('Invalid -y option')
-        signaturePositionX=Cell(default_x)
-        signaturePositionY=Cell(default_y)
+        signaturePositionX=Cell(lambda: parse_unit(args.x_coordinate, pageSize()[0], 'Invalid -x option', L=0, C=0.5, R=1)/pageSize()[0])
+        signaturePositionY=Cell(lambda: parse_unit(args.y_coordinate, pageSize()[1], 'Invalid -y option', T=0, C=0.5, B=1)/pageSize()[1])
         signatureScale=Cell(0)
         def translatablePDF(path):
             cache = translatablePDF._cache
@@ -183,16 +173,8 @@ def main(args):
         @Cell
         def defaultResizeFactor():
             (pageWidth, pageHeight)=pageSize()
-            try:
-                wm=m("^([0-9.]+)(pts|pt|in|cm|mm|%)$", args.width)
-                maxSignatureWidth=float(wm[1])*({'pts':1,'pt':1,'in':72,'cm':72/2.54,'mm':72/25.4,'%':pageWidth/100}[wm[2]])
-            except:
-                die('Invalid -W option')
-            try:
-                hm=m("^([0-9.]+)(pts|pt|in|cm|mm|%)$", args.height)
-                maxSignatureHeight=float(hm[1])*({'pts':1,'pt':1,'in':72,'cm':72/2.54,'mm':72/25.4,'%':pageHeight/100}[hm[2]])
-            except:
-                die('Invalid -H option')
+            maxSignatureWidth = parse_unit(args.width, pageWidth, 'Invalid -W option')
+            maxSignatureHeight = parse_unit(args.height, pageHeight, 'Invalid -H option')
             (signatureWidth, signatureHeight)=signatureSize()
             if not (0 < args.resize_factor): die('Invalid -r option')
             return min(args.resize_factor,
@@ -518,6 +500,19 @@ def main(args):
             print(f'Signed document saved as {signedFilePath}')
         else:
             print('Aborted')
+
+def parse_unit(text, one_hundred_percent, error_msg, **anchors):
+    try:
+        _, anchor, op, value, unit = m("^([A-Za-z]*)([\\+-]?)([0-9.]*)(pts?|in|cm|mm|%|)$", text)
+        if op: assert anchor and value and unit
+        elif anchor: assert not value and not unit
+        else: assert value and unit
+        return ({**anchors, '':0}[anchor.upper()]*one_hundred_percent +
+                {'+': 1, '-': -1, '': 1}[op] *
+                float(value or '0') *
+                {'pts':1,'pt':1,'in':72,'cm':72/2.54,'mm':72/25.4,'%':one_hundred_percent/100,'':0}[unit])
+    except:
+        die(error_msg)
 
 def runc(*cmd):
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -849,11 +844,11 @@ parser = OurArgumentParser(description='Sign a PDF file, with a non-cryptographi
 parser.add_argument('input', metavar='input.pdf', type=str, help='Input PDF file.')
 parser.add_argument('-p', '--page', type=int, default=-1, help='The page to sign, negative for counting from the end. (default: -1)')
 parser.add_argument('-s', '--signature', type=str, help=getSignatureHelp())
-parser.add_argument('-x', '--x-coordinate', type=str, default="50%", help='Horizontal coordinate of signature center. Requires unit %% (meaning percent of page width). May be preceded by L+ (default), L-, R+ or R- to give coordinate relative left of right edge of the page. For example, 25%% means a quarter page width from left edge, R-3%% means 3%% of page width from right edge. (default: 50%%)')
-parser.add_argument('-y', '--y-coordinate', type=str, default="B-25%", help='Vertical coordinate of signature center. Requires unit %% (meaning percent of page height). May be preceded by T+ (default), T-, B+ or B- to give coordinate relative top or bottom edge of the page. For example, 3%% means 3%% of page height from top edge, B-10%% means 10%% of page height from bottom edge. (default: B-25%%)')
+parser.add_argument('-x', '--x-coordinate', type=str, default="C", help='Horizontal coordinate of signature e.g. 25%%, R-3cm or C. Letters L, C and R means left edge, center and right edge respectively. The letter can be followed by + or -, a number and a unit. Supported units are pt, in, cm, mm and %% (percent of page width). Prefix L+ can be left out. (default: C)')
+parser.add_argument('-y', '--y-coordinate', type=str, default="B-25%", help='Vertical coordinate of signature e.g. C+25%% or B-2in. Letters T, C and B means top edge, center and bottom edge respectively. The letter can be followed by + or -, a number and a unit. Supported units are pt, in, cm, mm and %% (percent of page height). Prefix T+ can be left out. (default: B-25%%)')
 parser.add_argument('-r', '--resize-factor', type=float, default=1.0, help='Resize signature by this factor. If this would make the signature larger than allowed by -W or -H, then instead use the maximum allowed size.')
-parser.add_argument('-W', '--width', type=str, default="50%", help='Maximum width of signature. Supports units pt, in, cm, mm and %% (meaning percent of page width). (default: 50%%)')
-parser.add_argument('-H', '--height', type=str, default="50%", help='Maximum height of signature. Supports units pt, in, cm, mm and %% (meaning percent of page height). (default: 50%%)')
+parser.add_argument('-W', '--width', type=str, default="50%", help='Maximum width of signature, a number followed by a unit. Supported units are pt, in, cm, mm and %% (percent of page width). (default: 50%%)')
+parser.add_argument('-H', '--height', type=str, default="50%", help='Maximum height of signature, a number followed by a unit. Supported units are pt, in, cm, mm and %% (percent of page height). (default: 50%%)')
 parser.add_argument('-o', '--output', type=str, help='Output file. (default: Add ".signed" before the extension)')
 parser.add_argument('-b', '--batch', action=argparse.BooleanOptionalAction, default=False, help='Batch mode: do not show GUI. (default: False)')
 parser.add_argument('-f', '--flatten', action=argparse.BooleanOptionalAction, default=True, help='Flatten before signing, preventing subsequent changes in PDF forms. (default: True)')
