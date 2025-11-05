@@ -123,6 +123,8 @@ def main(args):
         signatureSize=Cell(lambda: pdfGetSize(signaturePath()))
         signaturePositionX=Cell(lambda: parse_unit(args.x_coordinate, pageSize()[0], 'Invalid -x option', L=0, C=0.5, R=1)/pageSize()[0])
         signaturePositionY=Cell(lambda: parse_unit(args.y_coordinate, pageSize()[1], 'Invalid -y option', T=0, C=0.5, B=1)/pageSize()[1])
+        anchorX = {'NW': 0, 'N': 0.5, 'NE': 1, 'W': 0, 'C': 0.5, 'E': 1, 'SW': 0, 'S': 0.5, 'SE': 1}[args.anchor]
+        anchorY = {'NW': 1, 'N': 1, 'NE': 1, 'W': 0.5, 'C': 0.5, 'E': 0.5, 'SW': 0, 'S': 0, 'SE': 0}[args.anchor]
         signatureScale=Cell(0)
         def translatablePDF(path):
             cache = translatablePDF._cache
@@ -185,8 +187,8 @@ def main(args):
             (w, h)=pageSize()
             (sw, sh)=signatureSize()
             resize=1.1**signatureScale()*defaultResizeFactor()
-            dx=w*signaturePositionX()/resize - sw/2
-            dy=h*(1-signaturePositionY())/resize - sh/2
+            dx=w*signaturePositionX()/resize - sw*anchorX
+            dy=h*(1-signaturePositionY())/resize - sh*anchorY
             outFile=intmp('signature-positioned.pdf')
             runc('gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
                  f'-sOutputFile={outFile}',
@@ -846,6 +848,7 @@ parser.add_argument('-p', '--page', type=int, default=-1, help='The page to sign
 parser.add_argument('-s', '--signature', type=str, help=getSignatureHelp())
 parser.add_argument('-x', '--x-coordinate', type=str, default="C", help='Horizontal coordinate of signature e.g. 25%%, R-3cm or C. Letters L, C and R means left edge, center and right edge respectively. The letter can be followed by + or -, a number and a unit. Supported units are pt, in, cm, mm and %% (percent of page width). Prefix L+ can be left out. (default: C)')
 parser.add_argument('-y', '--y-coordinate', type=str, default="B-25%", help='Vertical coordinate of signature e.g. C+25%% or B-2in. Letters T, C and B means top edge, center and bottom edge respectively. The letter can be followed by + or -, a number and a unit. Supported units are pt, in, cm, mm and %% (percent of page height). Prefix T+ can be left out. (default: B-25%%)')
+parser.add_argument('-a', '--anchor', type=str.upper, choices=['NW', 'N', 'NE', 'W', 'C', 'E', 'SW', 'S', 'SE'], default="C", help='Anchor point in signature. The signature will be translated to position the anchor point at the location defined by -x and -y. (default: C)')
 parser.add_argument('-r', '--resize-factor', type=float, default=1.0, help='Resize signature by this factor. If this would make the signature larger than allowed by -W or -H, then instead use the maximum allowed size.')
 parser.add_argument('-W', '--width', type=str, default="50%", help='Maximum width of signature, a number followed by a unit. Supported units are pt, in, cm, mm and %% (percent of page width). (default: 50%%)')
 parser.add_argument('-H', '--height', type=str, default="50%", help='Maximum height of signature, a number followed by a unit. Supported units are pt, in, cm, mm and %% (percent of page height). (default: 50%%)')
