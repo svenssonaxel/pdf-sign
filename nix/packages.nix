@@ -59,11 +59,10 @@ in rec {
     description = "Tool to visually sign PDF files";
     script = ''
       install -Dm755 pdf-sign -t $out/libexec
-      install -Dm755 pdf-create-empty -t $out/libexec
+      install -Dm755 pdf-create-empty -t $out/bin
       install -Dm755 pdf-from-text -t $out/libexec
       install -Dm644 empty-3inx2in.pdf -t $out/share/pdf-sign
       makeWrapper $out/libexec/pdf-sign $out/bin/pdf-sign --prefix PATH : ${path_all_deps}
-      makeWrapper $out/libexec/pdf-create-empty $out/bin/pdf-create-empty --prefix PATH : ${path_gs}
       makeWrapper $out/libexec/pdf-from-text $out/bin/pdf-from-text --prefix PATH : ${path_gs}
     '';
   };
@@ -71,8 +70,7 @@ in rec {
     pname = "pdf-create-empty";
     description = "Tool to create empty PDF files";
     script = ''
-      install -Dm755 pdf-create-empty -t $out/libexec
-      makeWrapper $out/libexec/pdf-create-empty $out/bin/pdf-create-empty --prefix PATH : ${path_gs}
+      install -Dm755 pdf-create-empty -t $out/bin
     '';
   };
   pdf-from-text = app {

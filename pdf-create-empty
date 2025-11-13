@@ -2,9 +2,8 @@
 
 # Dependencies:
 # - python3.7 or later
-# - gs (Ghostscript)
 
-import argparse, os, re, subprocess, sys
+import argparse, os, re, sys
 
 def main(args):
     d=args.dimensions
@@ -31,14 +30,27 @@ def main(args):
         dim_desc = f"{dim_desc_1(w, wraw, dm[1], dm[2])} x {dim_desc_1(h, hraw, dm[3], dm[4])}"
     except:
         die('Invalid dimensions')
-    pdf_proc = subprocess.run([
-        'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
-        f'-sOutputFile={o}',
-        '-sDEVICE=pdfwrite',
-        f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}',
-    ], capture_output=True, text=True, check=True)
-    assert pdf_proc.stdout == ""
-    assert pdf_proc.stderr == ""
+    with open(o, 'wb') as f:
+        # Adapted from smallest-possible-pdf-1.0.pdf at https://pdfa.org/the-smallest-possible-valid-pdf/
+        wstr, hstr = str(w), str(h)
+        wb, hb = wstr.encode('ascii'), hstr.encode('ascii')
+        startxref = str(172 + len(wstr) + len(hstr)).encode('ascii')
+        f.write(b'%PDF-1.0\n')
+        f.write(b'1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n')
+        f.write(b'2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n')
+        f.write(b'3 0 obj<</Type/Page/Parent 2 0 R/Resources<<>>/MediaBox[0 0 '
+                + wb + b' ' + hb
+                + b']>>endobj\n')
+        f.write(b'xref\n')
+        f.write(b'0 4\n')
+        f.write(b'0000000000 65535 f \n')
+        f.write(b'0000000009 00000 n \n')
+        f.write(b'0000000052 00000 n \n')
+        f.write(b'0000000101 00000 n \n')
+        f.write(b'trailer<</Root 1 0 R/Size 4>>\n')
+        f.write(b'startxref\n')
+        f.write(startxref + b'\n')
+        f.write(b'%%EOF')
     print(f'Wrote {o} with dimensions {dim_desc}')
 
 def m(pattern, string):
