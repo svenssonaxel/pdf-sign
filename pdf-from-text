@@ -79,6 +79,9 @@ def text_to_pdf(text, output, size, margin, center_baseline):
         # Get correct bounding box
         bbox_result = subprocess.run([
             "gs", '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+            # /prepress will among other things embed the font, which is
+            # necessary to achieve consistent rendering across viewers.
+            '-dPDFSETTINGS=/prepress',
             "-sDEVICE=bbox",
             ps_file
         ], capture_output=True, text=True, check=True)
@@ -102,6 +105,9 @@ def text_to_pdf(text, output, size, margin, center_baseline):
         write_ps()
         # Convert to PDF
         runc("gs", '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
+            # /prepress will among other things embed the font, which is
+            # necessary to achieve consistent rendering across viewers.
+             '-dPDFSETTINGS=/prepress',
              "-o", output,
              "-sDEVICE=pdfwrite",
              f"-dDEVICEWIDTHPOINTS={w}",
