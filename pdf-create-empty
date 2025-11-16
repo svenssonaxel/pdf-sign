@@ -3,6 +3,30 @@
 # Dependencies:
 # - python3.7 or later
 
+################################################################################
+# The MIT License (MIT)                                                        #
+#                                                                              #
+# Copyright © 2021-2025 Axel Svensson                                          #
+#                                                                              #
+# Permission is hereby granted, free of charge, to any person obtaining a copy #
+# of this software and associated documentation files (the “Software”), to     #
+# deal in the Software without restriction, including without limitation the   #
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or  #
+# sell copies of the Software, and to permit persons to whom the Software is   #
+# furnished to do so, subject to the following conditions:                     #
+#                                                                              #
+# The above copyright notice and this permission notice shall be included in   #
+# all copies or substantial portions of the Software.                          #
+#                                                                              #
+# THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR   #
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,     #
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE  #
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER       #
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING      #
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS #
+# IN THE SOFTWARE.                                                             #
+################################################################################
+
 import argparse, os, re, sys
 
 def main(args):
@@ -95,7 +119,8 @@ class OurArgumentParser(argparse.ArgumentParser):
         if status == 2: status = 1
         super().exit(status=status, message=message)
 
-parser = OurArgumentParser(description='Create an empty, transparent PDF file.')
+parser = OurArgumentParser(description='Create an empty, transparent PDF file.',
+                           epilog='© 2021-2025 Axel Svensson')
 parser.add_argument('-o', '--output', metavar='FILE', type=str, help='Output PDF file. (default: empty-DIMENSIONS.pdf)')
 parser.add_argument('-d', '--dimensions', type=str, default='3inx2in', help='The page dimensions of the file to create in WIDTHxHEIGHT format, e.g. 3inx2in. Supported units are pt, in, cm, and mm. Can also be an ISO or common US size e.g. A4, C5L or letter, with an L suffix meaning landscape. (default: 3inx2in)')
 

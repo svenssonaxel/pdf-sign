@@ -28,6 +28,19 @@ let
       cmp sync-pdf-sign sync-pdf-from-text
     '';
   };
+  copyright = pkgs.stdenv.mkDerivation {
+    name = "check-copyright";
+    src = ./..;
+    buildPhase = ''
+      mkdir -p $out
+      years="2021-2025"
+      [ `grep -Ec "^Copyright © $years " LICENSE` == 1 ]
+      for file in pdf-sign pdf-create-empty pdf-from-text; do
+        [ `grep -Ec "^# Copyright © $years " $file` == 1 ]
+        [ `grep -Ec "^ *epilog='© $years " $file` == 1 ]
+      done
+    '';
+  };
   test = has_gui: test_name: program: check_name: let
     # Dependencies for running tests
     python3_for_testing = pkgs.python3.withPackages (ps: (with ps; [
@@ -114,4 +127,4 @@ in (builtins.listToAttrs (builtins.map
           x2 = builtins.elemAt x 2;
           x3 = builtins.elemAt x 3;
       in { name = x3; value = test x0 x1 x2 x3; })
-  test_table)) // { inherit code_sync; }
+  test_table)) // { inherit code_sync copyright; }

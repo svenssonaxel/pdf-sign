@@ -8,6 +8,30 @@
 # - pdfinfo.
 # - which.
 
+################################################################################
+# The MIT License (MIT)                                                        #
+#                                                                              #
+# Copyright © 2021-2025 Axel Svensson                                          #
+#                                                                              #
+# Permission is hereby granted, free of charge, to any person obtaining a copy #
+# of this software and associated documentation files (the “Software”), to     #
+# deal in the Software without restriction, including without limitation the   #
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or  #
+# sell copies of the Software, and to permit persons to whom the Software is   #
+# furnished to do so, subject to the following conditions:                     #
+#                                                                              #
+# The above copyright notice and this permission notice shall be included in   #
+# all copies or substantial portions of the Software.                          #
+#                                                                              #
+# THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR   #
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,     #
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE  #
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER       #
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING      #
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS #
+# IN THE SOFTWARE.                                                             #
+################################################################################
+
 import argparse, math, os, queue, re, subprocess, sys, tempfile, traceback, time
 
 def die(reason):
@@ -941,7 +965,8 @@ class OurArgumentParser(argparse.ArgumentParser):
         if status == 2: status = 1
         super().exit(status=status, message=message)
 
-parser = OurArgumentParser(description='Sign a PDF file, with a non-cryptographic squiggle.')
+parser = OurArgumentParser(description='Sign a PDF file, with a non-cryptographic squiggle.',
+                           epilog='© 2021-2025 Axel Svensson')
 parser.add_argument('input', metavar='input.pdf', type=str, help='Input PDF file.')
 parser.add_argument('-p', '--page', type=int, default=-1, help='The page to sign, negative for counting from the end. (default: -1)')
 parser.add_argument('-s', '--signature', type=str, help=getSignatureHelp())
