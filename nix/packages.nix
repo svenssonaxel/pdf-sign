@@ -7,7 +7,6 @@
 , python3
 , python3_with_tk
 , qpdf_or_pdftk
-, which
 }:
 # Inspired by
 # https://github.com/NixOS/nixpkgs/blob/755b915a158c9d588f08e9b08da9f7f3422070cc/pkgs/by-name/pd/pdf-sign/package.nix
@@ -18,7 +17,6 @@ let
     ghostscript
     poppler_utils
     qpdf_or_pdftk
-    which
   ];
   path_gs = lib.makeBinPath [ ghostscript ];
   app = { pname, description, script }:

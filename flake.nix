@@ -16,7 +16,6 @@
           poppler_utils
           python3
           stdenv
-          which
         ;
         python3_with_tk = pkgs.python3.withPackages (ps: with ps; [ tkinter ]);
         qpdf_or_pdftk = pkgs.qpdf;

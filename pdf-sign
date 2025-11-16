@@ -6,7 +6,6 @@
 # - gs (Ghostscript)
 # - qpdf or pdftk (pdf-sign will use pdftk if qpdf cannot be found)
 # - pdfinfo.
-# - which.
 
 ################################################################################
 # The MIT License (MIT)                                                        #
@@ -32,7 +31,7 @@
 # IN THE SOFTWARE.                                                             #
 ################################################################################
 
-import argparse, math, os, queue, re, subprocess, sys, tempfile, traceback, time
+import argparse, math, os, queue, re, shutil, subprocess, sys, tempfile, traceback, time
 
 def die(reason):
     print(reason, file=sys.stderr)
@@ -640,7 +639,7 @@ def runc(*cmd):
         die(f"Command {' '.join(cmd)} exited with code {proc.returncode}")
 
 def has(cmd):
-    return subprocess.run(["which", cmd], check=False, capture_output=True).returncode == 0
+    return shutil.which(cmd) is not None
 hasQpdf = has("qpdf")
 def qpdfOrPdftk(qpdfCmd, pdftkCmd):
     assert qpdfCmd[0] == "qpdf" and pdftkCmd[0] == "pdftk"
