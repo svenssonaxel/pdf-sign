@@ -11,7 +11,7 @@ import numpy as np
 from functools import cache
 from logging import info
 
-from util import runc, runbg, run_env, DynVar
+from util import runc, runsh, runbg, run_env, DynVar
 from intmp import intmp
 from gen_pdf import Signature, gen_rnd_pages, sign_pages, gen_pdf, Rng
 from compare_pdf import assert_pdf_exactly_equal, read_ppm
@@ -77,11 +77,21 @@ def _pdf_sign_gui(args, keys, expect_abort, _):
     out, err = proc.communicate()
     assert proc.returncode == 0, f"pdf-sign GUI exited with code {proc.returncode}.\nSTDOUT:\n{out}\nSTDERR:\n{err}"
     assert err == "", f"pdf-sign GUI produced output on stderr:\n{err}"
+    assert display_is_black("Assert black display after GUI shutdown")
     if expect_abort:
         assert "Aborted" in out, f"pdf-sign GUI did not report abort on stdout:\n{out}"
+        assert not outfile.exists()
     else:
-        assert str(outfile) in out, f"pdf-sign GUI did not report output file {outfile} on stdout:\n{out}"
-    assert display_is_black("Assert black display after GUI shutdown")
+        [done_msg, automation_cmd] = out.split("How to automate this:")
+        assert outfile.exists()
+        assert str(outfile) in done_msg, f"pdf-sign GUI did not report output file {outfile} on stdout:\n{out}"
+        assert str(outfile) in automation_cmd, f"pdf-sign GUI did not include output file {outfile} in automation command on stdout:\n{out}"
+        automation_outfile = intmp('pdf', f"Batch signed PDF using automation cmd of {outfile}")
+        automation_cmd = automation_cmd.replace(str(outfile), str(automation_outfile))
+        shout = runsh(automation_cmd)
+        assert automation_outfile.exists()
+        assert str(automation_outfile) in shout, f"pdf-sign GUI automation command did not report output file {automation_outfile} on stdout:\n{shout}"
+        assert_pdf_exactly_equal(outfile, automation_outfile)
     return outfile
 
 @cache

@@ -31,7 +31,7 @@
 # IN THE SOFTWARE.                                                             #
 ################################################################################
 
-import argparse, math, os, queue, re, shutil, subprocess, sys, tempfile, traceback, time
+import argparse, math, os, queue, re, shlex, shutil, subprocess, sys, tempfile, traceback, time
 
 def die(reason):
     print(reason, file=sys.stderr)
@@ -197,7 +197,7 @@ def main(args):
                 cache[content]=fileName
                 return fileName
             signaturePath._cache={}
-            signatureSize=Cell(lambda: pdfGetSize(signaturePath()))
+            s.signatureSize=Cell(lambda: pdfGetSize(signaturePath()))
             s.signaturePositionX=Cell(lambda: parse_unit(s.x_coordinate, s.pageSize()[0], 'Invalid -x option', L=0, C=0.5, R=1)/s.pageSize()[0])
             s.signaturePositionY=Cell(lambda: parse_unit(s.y_coordinate, s.pageSize()[1], 'Invalid -y option', T=0, C=0.5, B=1)/s.pageSize()[1])
             anchorX = {'NW': 0, 'N': 0.5, 'NE': 1, 'W': 0, 'C': 0.5, 'E': 1, 'SW': 0, 'S': 0.5, 'SE': 1}[s.anchor]
@@ -208,16 +208,17 @@ def main(args):
                 (pageWidth, pageHeight)=s.pageSize()
                 maxSignatureWidth = parse_unit(s.width, pageWidth, 'Invalid -W option')
                 maxSignatureHeight = parse_unit(s.height, pageHeight, 'Invalid -H option')
-                (signatureWidth, signatureHeight)=signatureSize()
+                (signatureWidth, signatureHeight)=s.signatureSize()
                 if not (0 < s.resize_factor): die('Invalid -r option')
-                return min(s.resize_factor,
-                           maxSignatureWidth / signatureWidth,
-                           maxSignatureHeight / signatureHeight)
+                return (s.resize_factor,
+                        maxSignatureWidth / signatureWidth,
+                        maxSignatureHeight / signatureHeight)
+            s.defaultResizeFactor = defaultResizeFactor
             @VolatileCell
             def signaturePositionedPDF():
                 (w, h)=s.pageSize()
-                (sw, sh)=signatureSize()
-                resize=1.1**s.signatureScale()*defaultResizeFactor()
+                (sw, sh)=s.signatureSize()
+                resize=1.1**s.signatureScale()*min(*s.defaultResizeFactor())
                 dx=w*s.signaturePositionX()/resize - sw*anchorX
                 dy=h*(1-s.signaturePositionY())/resize - sh*anchorY
                 outFile=intmp(f'{i}-signature-positioned.pdf')
@@ -600,6 +601,8 @@ def main(args):
                 'output', signedFilePath,
             ])
             print(f'Signed document saved as {signedFilePath}')
+            if gui:
+                print_how_to_automate_this_call(args, steps, pageCount)
         else:
             print('Aborted')
 
@@ -993,5 +996,131 @@ def new_sig_step():
         setattr(sig, a.dest, a.default)
     return sig
 parsed_args.new_sig_step = new_sig_step
+
+def print_how_to_automate_this_call(args, steps, pageCount):
+    txt=["pdf-sign"]
+    JOIN, SP, NBSP = object(), object(), object()
+    state = SP
+    def add(*things):
+        nonlocal txt, state
+        for thing in things:
+            if thing in [JOIN, SP, NBSP]:
+                state = thing
+                continue
+            is_short = len(thing)==2 and thing.startswith('-')
+            if state == JOIN:
+                txt[-1] += thing[1:] if is_short else thing
+            elif state == SP:
+                txt.append(thing)
+            else:
+                txt[-1]+=f' {thing}'
+            state = JOIN if is_short else SP
+    # -f
+    if not args.flatten: add('--no-flatten')
+    # -e
+    if args.existing != 'backup': add('-e', args.existing)
+    # -c
+    if args.continue_on_warnings: add('-c')
+    # steps
+    def f(fl):
+        i=0
+        while not math.isclose(fl, round(fl, i)):
+            i+=1
+        ret = str(round(fl, i))
+        if ret.endswith(".0"): return ret[:-2]
+        return ret
+    def p(path):
+        home = os.path.expanduser("~/")
+        if path.startswith(home):
+            return f'~/{shlex.quote(path[len(home):])}'
+        else:
+            return shlex.quote(path)
+    for i, s in enumerate(steps):
+        if i: add('-n')
+        add('-b')
+        if s.batch:
+            if s.page != -1: add('-p', str(s.page))
+            if s.signature: add('-s', NBSP, p(s.signature))
+            if s.text: add('-t', shlex.quote(s.text[0]), SP)
+            if s.x_coordinate != 'C': add('-x', s.x_coordinate)
+            if s.y_coordinate != 'B-25%': add('-y', s.y_coordinate)
+            if s.anchor != 'C': add('-a', s.anchor)
+            if s.resize_factor != 1.0: add('-r', f(s.resize_factor))
+            if s.width != '50%': add('-W', s.width)
+            if s.height != '50%': add('-H', s.height)
+        else:
+            # -p
+            if s.pageNumber() != pageCount:
+                add('-p', str(s.pageNumber()))
+            # -st
+            (signType, _, content)=s.signatures[s.signatureIndex()]
+            if signType=='cell':
+                (signType, _, content)=content()
+            if signType == 'file':
+                add('-s', NBSP, p(content))
+            else:
+                add('-t', shlex.quote(content), SP)
+            # -xy
+            if s.signaturePositionX() != 0.5:
+                add('-x', f'{f(s.signaturePositionX()*100)}%')
+            if s.signaturePositionY() != 0.75:
+                add('-y', f'{f(s.signaturePositionY()*100)}%')
+            # -a
+            if s.anchor != 'C': add('-a', s.anchor)
+            # -rWH
+            resize_r, resize_w, resize_h = s.defaultResizeFactor()
+            resize = min(resize_r, resize_w, resize_h)
+            scale = 1.1**s.signatureScale()
+            (signature_width, signature_height)=s.signatureSize()
+            (page_width, page_height)=s.pageSize()
+            resize_tot = resize * scale
+            w = signature_width/page_width*resize_tot
+            h = signature_height/page_height*resize_tot
+            c=math.ceil
+            if resize == resize_r:
+                if resize_tot != 1:
+                    add('-r', f(resize_tot))
+                if w > 0.5:
+                    add('-W', f'{f(c(w)*100)}%')
+                if h > 0.5:
+                    add('-H', f'{f(c(h)*100)}%')
+            else:
+                if resize_tot > 1:
+                    add('-r', f(c(resize_tot)))
+                arg, opt, resize_d, other_opt, other_factor = (
+                    (s.width, '-W', resize_w, '-H', h)
+                    if resize == resize_w else
+                    (s.height, '-H', resize_h, '-W', w))
+                if scale == 1:
+                    if arg != '50%':
+                        add(opt, arg)
+                else:
+                    add(opt, f'{f(resize_d*scale*100)}%')
+                if other_factor > 0.5:
+                    add(other_opt, f'{f(c(other_factor)*100)}%')
+    # -o
+    if args.output: add('-o', NBSP, p(args.output))
+    # input
+    add(SP, p(args.input))
+    # print
+    pre = "How to automate this:"
+    cols = shutil.get_terminal_size().columns
+    oneline = ' '.join([pre, *txt])
+    if len(oneline) < cols:
+        print(oneline)
+    else:
+        print(pre)
+        print('  ', end='')
+        rem = cols - 4
+        while txt:
+            [thing, *txt] = txt
+            print(thing, end='')
+            rem -= len(thing)
+            if txt and rem < len(txt[0]) + 4:
+                print(' \\\n    ', end='')
+                rem = cols - 6
+            elif txt:
+                print(' ', end='')
+        print('')
 
 main(parsed_args)

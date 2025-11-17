@@ -12,14 +12,19 @@ class DynVar:
 
 run_env = DynVar({})
 
-def _run_eec(cmd, expected_ec=0):
+def _run_eec(cmd, expected_ec=0, shell=False):
     cmd = [str(x) for x in cmd]
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=40, env={**os.environ, **run_env()})
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False, shell=shell, timeout=40, env={**os.environ, **run_env()})
     assert proc.returncode == expected_ec, f"Expected EC {expected_ec} but got {proc.returncode}.\ncmd: {cmd}\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
     return proc.stdout, proc.stderr
 
 def runc(*cmd):
     out, err = _run_eec(cmd)
+    assert err == "", f"Expected no STDERR, but got:\n{err}"
+    return out
+
+def runsh(cmd):
+    out, err = _run_eec([cmd], shell=True)
     assert err == "", f"Expected no STDERR, but got:\n{err}"
     return out
 
