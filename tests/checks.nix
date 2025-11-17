@@ -28,8 +28,12 @@ let
       cmp sync-pdf-sign sync-pdf-from-text
     '';
   };
-  copyright = pkgs.stdenv.mkDerivation {
-    name = "check-copyright";
+  copyright_and_version = let
+    v = packages_default.pdf-sign.version;
+  in assert v == packages_default.pdf-create-empty.version;
+    assert v == packages_default.pdf-from-text.version;
+    pkgs.stdenv.mkDerivation {
+    name = "check-copyright-and-version";
     src = ./..;
     buildPhase = ''
       mkdir -p $out
@@ -37,7 +41,7 @@ let
       [ `grep -Ec "^Copyright © $years " LICENSE` == 1 ]
       for file in pdf-sign pdf-create-empty pdf-from-text; do
         [ `grep -Ec "^# Copyright © $years " $file` == 1 ]
-        [ `grep -Ec "^ *epilog='© $years " $file` == 1 ]
+        [ `grep -Ec "^ *epilog='(Part of )?pdf-sign v${v} © $years " $file` == 1 ]
       done
     '';
   };
@@ -127,4 +131,4 @@ in (builtins.listToAttrs (builtins.map
           x2 = builtins.elemAt x 2;
           x3 = builtins.elemAt x 3;
       in { name = x3; value = test x0 x1 x2 x3; })
-  test_table)) // { inherit code_sync copyright; }
+  test_table)) // { inherit code_sync copyright_and_version; }

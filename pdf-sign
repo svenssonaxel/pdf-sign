@@ -968,7 +968,7 @@ class OurArgumentParser(argparse.ArgumentParser):
         super().exit(status=status, message=message)
 
 parser = OurArgumentParser(description='Sign a PDF file, with a non-cryptographic squiggle.',
-                           epilog='© 2021-2025 Axel Svensson')
+                           epilog='pdf-sign v0.1.0 © 2021-2025 Axel Svensson')
 parser.add_argument('input', metavar='input.pdf', type=str, help='Input PDF file.')
 parser.add_argument('-p', '--page', type=int, default=-1, help='The page to sign, negative for counting from the end. (default: -1)')
 parser.add_argument('-s', '--signature', type=str, help=getSignatureHelp())

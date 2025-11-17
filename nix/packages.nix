@@ -22,7 +22,7 @@ let
   app = { pname, description, script }:
     stdenv.mkDerivation {
       inherit pname;
-      version = "0-unstable-2025-10-19";
+      version = "0.1.0";
       src = lib.cleanSourceWith {
         src = ./..;
         filter = (path: type:

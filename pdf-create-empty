@@ -120,7 +120,7 @@ class OurArgumentParser(argparse.ArgumentParser):
         super().exit(status=status, message=message)
 
 parser = OurArgumentParser(description='Create an empty, transparent PDF file.',
-                           epilog='© 2021-2025 Axel Svensson')
+                           epilog='Part of pdf-sign v0.1.0 © 2021-2025 Axel Svensson')
 parser.add_argument('-o', '--output', metavar='FILE', type=str, help='Output PDF file. (default: empty-DIMENSIONS.pdf)')
 parser.add_argument('-d', '--dimensions', type=str, default='3inx2in', help='The page dimensions of the file to create in WIDTHxHEIGHT format, e.g. 3inx2in. Supported units are pt, in, cm, and mm. Can also be an ISO or common US size e.g. A4, C5L or letter, with an L suffix meaning landscape. (default: 3inx2in)')
 

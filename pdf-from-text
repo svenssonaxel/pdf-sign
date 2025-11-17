@@ -32,7 +32,7 @@ import argparse, math, os, re, subprocess, sys, tempfile
 
 def main():
     parser = OurArgumentParser(description="Create a correctly cropped PDF from one line of text. Only Latin-1 character set is supported.",
-                               epilog='© 2021-2025 Axel Svensson')
+                               epilog='Part of pdf-sign v0.1.0 © 2021-2025 Axel Svensson')
     parser.add_argument("-t", "--text", required=True, help="Text to be converted to PDF.")
     parser.add_argument("-o", "--output", required=True, help="Output PDF file.")
     parser.add_argument("-s", "--size", type=int, default=12, help="Font size in points (default 12).")
