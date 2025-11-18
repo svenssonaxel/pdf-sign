@@ -893,7 +893,12 @@ def removePdfSuffix(filename):
 
 def fromCmdOutput(cmd, pattern):
     sp=subprocess.run(cmd, check=True, text=True, capture_output=True)
-    assert sp.stderr == ""
+    if sp.stderr:
+        print(f"Command {' '.join(cmd)} produced output on stderr:\n"+
+              sp.stderr.strip(),
+              file=sys.stderr)
+        if not CONTINUE_ON_WARNINGS:
+            die("\nRun pdf-sign with flag -c or --continue-on-warnings to ignore.")
     return m(pattern, sp.stdout)
 
 # Copied from idlelib.run (Python standard library).
