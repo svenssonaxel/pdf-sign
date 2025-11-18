@@ -192,7 +192,7 @@ def test_gui():
        )
     eq(["-p1"], [],
        ["Prior", "Prior", "s"],
-       ["Prior", "Prior", "Prior", "s"], # No wraparaound
+       ["Prior", "Prior", "Prior", "s"], # No wraparound
        )
     neq([2, 3], [], [], ["Prior", "s"])
 
