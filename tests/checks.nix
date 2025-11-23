@@ -114,16 +114,12 @@ let
     [ false "empty"      packages_py37.pdf-create-empty    "empty_py37_standalone"  ]
     [ false "empty"      packages_py314.pdf-sign           "empty_py317"            ]
     [ false "empty"      packages_py314.pdf-create-empty   "empty_py317_standalone" ]
-    [ false "empty"      packages_pdftk.pdf-sign           "empty_pdftk"            ]
-    [ false "empty"      packages_pdftk.pdf-create-empty   "empty_pdftk_standalone" ]
     [ false "text"       packages_default.pdf-sign         "text"                   ]
     [ false "text"       packages_default.pdf-from-text    "text_standalone"        ]
     [ false "text"       packages_py37.pdf-sign            "text_py37"              ]
     [ false "text"       packages_py37.pdf-from-text       "text_py37_standalone"   ]
     [ false "text"       packages_py314.pdf-sign           "text_py317"             ]
     [ false "text"       packages_py314.pdf-from-text      "text_py317_standalone"  ]
-    [ false "text"       packages_pdftk.pdf-sign           "text_pdftk"             ]
-    [ false "text"       packages_pdftk.pdf-from-text      "text_pdftk_standalone"  ]
   ];
 in (builtins.listToAttrs (builtins.map
   (x: let x0 = builtins.elemAt x 0;
