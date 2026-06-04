@@ -893,9 +893,23 @@ def removePdfSuffix(filename):
 
 def fromCmdOutput(cmd, pattern):
     sp=subprocess.run(cmd, check=True, text=True, capture_output=True)
-    if sp.stderr:
+    stderr=sp.stderr
+    if cmd[0] == "pdfinfo":
+        # Work around a poppler bug: for a perfectly conformant
+        # `/MarkInfo << ... /Suspects false >>`, pdfinfo prints this spurious
+        # "Syntax Error" to stderr while still producing correct stdout and
+        # exiting 0. The "(boolean)" variant is specifically the false positive
+        # (a genuinely wrong type reports its actual type, e.g. "(integer)"), so
+        # matching the exact line keeps real wrong-type warnings intact. Fixed
+        # upstream in poppler 2a4edaea6a7494c52ecc351214a72e8b4b4b0e89
+        # ("Do not report pdf syntax error when Suspects or UserProperties have
+        # false value"); drop the line so pre-fix poppler versions don't trip the
+        # stderr check below.
+        stderr=stderr.replace(
+            "Syntax Error: Suspects object is wrong type (boolean)\n", "")
+    if stderr:
         print(f"Command {' '.join(cmd)} produced output on stderr:\n"+
-              sp.stderr.strip(),
+              stderr.strip(),
               file=sys.stderr)
         if not CONTINUE_ON_WARNINGS:
             die("\nRun pdf-sign with flag -c or --continue-on-warnings to ignore.")
