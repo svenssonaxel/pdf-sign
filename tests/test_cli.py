@@ -13,6 +13,7 @@ from compare_pdf import assert_pdf_almost_equal, assert_pdf_exactly_equal
 from functools import cache
 from logging import info
 from pypdf import PdfReader, PdfWriter
+from pypdf.generic import BooleanObject, DictionaryObject, NameObject
 from pathlib import Path
 
 # helpers
@@ -410,3 +411,32 @@ def test_cli_next():
                     pos_args = [*pos_args, "-nb" if pos_args else "-b", *new_pos_args],
                     depth = depth + 1)
     do_test(doc, doc_pdf.name, [], 0)
+
+# A conformant `/MarkInfo << /Suspects false >>` (poppler false-positive)
+def test_cli_suspects_false():
+    # Some poppler versions print a spurious "Syntax Error: Suspects object is
+    # wrong type (boolean)" to stderr for a perfectly conformant
+    # `/MarkInfo << ... /Suspects false >>`, while still producing correct
+    # stdout and exiting 0. pdf-sign's fromCmdOutput() drops that exact line so
+    # it is not mistaken for a fatal warning; signing such a document must thus
+    # succeed without -c and without noise on stderr. Fixed upstream in poppler
+    # 2a4edaea6a7494c52ecc351214a72e8b4b4b0e89. runc() requires exit 0 and empty
+    # stderr, so this regresses loudly if the workaround is removed while a
+    # pre-fix poppler is in use.
+    rng = Rng(seed=7)
+    doc = gen_rnd_pages(seed=rng.random(), n=2)
+    doc_pdf = gen_pdf(doc, "Document for the /Suspects false test")
+    # Inject a conformant `/MarkInfo << /Marked true /Suspects false >>` into the
+    # document catalog, which is what triggers the spurious poppler warning.
+    marked_pdf = intmp('pdf', f"{doc_pdf.name} with /Suspects false in catalog")
+    writer = PdfWriter(clone_from=str(doc_pdf))
+    mark_info = DictionaryObject()
+    mark_info[NameObject("/Marked")] = BooleanObject(True)
+    mark_info[NameObject("/Suspects")] = BooleanObject(False)
+    writer._root_object[NameObject("/MarkInfo")] = mark_info
+    with open(marked_pdf, 'wb') as f:
+        writer.write(f)
+    sig_pdf = gen_pdf([Signature(seed=rng.random())], "Signature for the /Suspects false test")
+    out_pdf = intmp('pdf', "Signed /Suspects false document")
+    assert f"Signed document saved as {out_pdf}\n" == runc(
+        "pdf-sign", "-bs", sig_pdf, "-xC", "-o", out_pdf, marked_pdf)
