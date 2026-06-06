@@ -5,7 +5,7 @@
 A tool to sign PDF files, with Linux support.
 We are here referring to the visible, non-cryptographic squiggles.
 
-![](README-example-use.gif)
+![](readme-assets/example-use.gif)
 
 ## How
 
@@ -17,7 +17,7 @@ The recommended way is:
   You can for example use Okular's Freehand Line, or transfer it to your smartphone and use Adobe Acrobat Reader.
   Keep in mind that it's the center of this mini-page that will be used for positioning the signature.
 
-  <img src="README-example-signature.gif" width="250"/>
+  <img src="readme-assets/example-signature.gif" width="250"/>
 
   It's a good idea to write your signature on an imagined line through the center of the mini-page.
   That way, it can be positioned correctly by clicking on the signature line.
@@ -29,7 +29,7 @@ The GUI is self documented and allows both keyboard-only and pointer-only operat
 
 Run `pdf-sign -h`, `pdf-create-empty -h` or `pdf-from-text -h` for details.
 
-**Installation**
+### Installation
 
 * Install dependencies
   * `python3.7` or later
@@ -39,7 +39,7 @@ Run `pdf-sign -h`, `pdf-create-empty -h` or `pdf-from-text -h` for details.
   * `pdfinfo`
 * Copy the tools to a directory in your `$PATH`.
 
-**Installation on Debian**
+#### Debian
 
 ```sh
 apt-get update
@@ -49,10 +49,33 @@ cd pdf-sign
 cp pdf-* /usr/local/bin/
 ```
 
+#### Nix
+
+`pdf-sign` has a nix flake that you can use directly from your cmd-line like so:
+
+```
+# Use flake in master branch
+pdf_sign='nix run github:svenssonaxel/pdf-sign --'
+pdf_create_empty='nix run github:svenssonaxel/pdf-sign#pdf-create-empty --'
+pdf_from_text='nix run github:svenssonaxel/pdf-sign#pdf-from-text --'
+
+# Example use
+$pdf_sign --help
+$pdf_create_empty --help
+$pdf_from_text --help
+```
+
+You can also use it as published in `nixpkgs`:
+
+```
+pdf_sign='nix run nixpkgs#pdf-sign --'
+$pdf_sign --help
+```
+
 ### Related use cases
 
 * You can add the date or other pieces of text using the `--text` CLI option or `Signature -> Custom text` menu option.
-  If you want both a date and a signature, you have to invoke `pdf-sign` twice.
+  If you want both a date and a signature, you can use `--next` or `File -> Sign & Next`.
 * You can convert SVG stamps/marks and add them to your signature directory. Example:
   ```
   curl -LO https://www.svgrepo.com/download/438371/checkmark-round.svg

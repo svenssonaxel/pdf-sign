@@ -1,0 +1,9 @@
+To run all tests:
+  nix flake check ..
+
+To inspect files created by a particular test case:
+  # If the test case is failing, first change the `false` line in checks.nix
+  testcase=cli # for example
+  sys=$(nix eval --impure --raw --expr builtins.currentSystem)
+  nix build -L ..#checks.$sys.$testcase
+  ls -lA result/

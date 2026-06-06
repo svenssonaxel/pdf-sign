@@ -2,9 +2,32 @@
 
 # Dependencies:
 # - python3.7 or later
-# - gs (Ghostscript)
 
-import argparse, os, re, subprocess, sys
+################################################################################
+# The MIT License (MIT)                                                        #
+#                                                                              #
+# Copyright © 2021-2025 Axel Svensson                                          #
+#                                                                              #
+# Permission is hereby granted, free of charge, to any person obtaining a copy #
+# of this software and associated documentation files (the “Software”), to     #
+# deal in the Software without restriction, including without limitation the   #
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or  #
+# sell copies of the Software, and to permit persons to whom the Software is   #
+# furnished to do so, subject to the following conditions:                     #
+#                                                                              #
+# The above copyright notice and this permission notice shall be included in   #
+# all copies or substantial portions of the Software.                          #
+#                                                                              #
+# THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR   #
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,     #
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE  #
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER       #
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING      #
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS #
+# IN THE SOFTWARE.                                                             #
+################################################################################
+
+import argparse, os, re, sys
 
 def main(args):
     d=args.dimensions
@@ -13,21 +36,46 @@ def main(args):
         o=f'empty-{d}.pdf'
     if os.path.exists(o):
         die(f'Output file {o} already exists')
-    dm=m("^([0-9.]+)(pts|pt|in|cm|mm)x([0-9.]+)(pts|pt|in|cm|mm)$", d)
-    w=None
-    h=None
     try:
-        w=int(float(dm[1])*({'pts':1,'pt':1,'in':72,'cm':28.3,'mm':2.83}[dm[2]]))
-        h=int(float(dm[3])*({'pts':1,'pt':1,'in':72,'cm':28.3,'mm':2.83}[dm[4]]))
+        d = iso_size_to_mm(d)
+    except:
+        pass
+    try:
+        d = us_size_to_in(d)
+    except:
+        pass
+    try:
+        dm=m("^([0-9.]+)(pts|pt|in|cm|mm)x([0-9.]+)(pts|pt|in|cm|mm)$", d)
+        wraw=float(dm[1])*({'pts':1,'pt':1,'in':72,'cm':72/2.54,'mm':72/25.4}[dm[2]])
+        hraw=float(dm[3])*({'pts':1,'pt':1,'in':72,'cm':72/2.54,'mm':72/25.4}[dm[4]])
+        w, h=round(wraw), round(hraw)
+        def dim_desc_1(v, vraw, uval, unit):
+            return f"{v}pt{'=' if v==vraw else '≈'}{uval}{'pt' if unit=='pts' else unit}"
+        dim_desc = f"{dim_desc_1(w, wraw, dm[1], dm[2])} x {dim_desc_1(h, hraw, dm[3], dm[4])}"
     except:
         die('Invalid dimensions')
-    subprocess.run([
-        'gs', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dQUIET',
-        f'-sOutputFile={o}',
-        '-sDEVICE=pdfwrite',
-        f'-dDEVICEWIDTHPOINTS={w}', f'-dDEVICEHEIGHTPOINTS={h}',
-    ], check=True)
-    print(f'Wrote a pdf file with dimensions {w}x{h} pts to {o}')
+    with open(o, 'wb') as f:
+        # Adapted from smallest-possible-pdf-1.0.pdf at https://pdfa.org/the-smallest-possible-valid-pdf/
+        wstr, hstr = str(w), str(h)
+        wb, hb = wstr.encode('ascii'), hstr.encode('ascii')
+        startxref = str(172 + len(wstr) + len(hstr)).encode('ascii')
+        f.write(b'%PDF-1.0\n')
+        f.write(b'1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n')
+        f.write(b'2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n')
+        f.write(b'3 0 obj<</Type/Page/Parent 2 0 R/Resources<<>>/MediaBox[0 0 '
+                + wb + b' ' + hb
+                + b']>>endobj\n')
+        f.write(b'xref\n')
+        f.write(b'0 4\n')
+        f.write(b'0000000000 65535 f \n')
+        f.write(b'0000000009 00000 n \n')
+        f.write(b'0000000052 00000 n \n')
+        f.write(b'0000000101 00000 n \n')
+        f.write(b'trailer<</Root 1 0 R/Size 4>>\n')
+        f.write(b'startxref\n')
+        f.write(startxref + b'\n')
+        f.write(b'%%EOF')
+    print(f'Wrote {o} with dimensions {dim_desc}')
 
 def m(pattern, string):
     match = re.match(pattern, string, re.DOTALL)
@@ -40,16 +88,40 @@ def m(pattern, string):
         ret.append(match.group(index))
     return ret
 
+def iso_size_to_mm(d):
+    dm=m("^([ABCabc])([0-9]|10)([Ll]?)$", d)
+    short_dim=2**((int(dm[2])+{"A":1/2, "B":0, "C": 1/4}[dm[1].upper()])/-2)
+    long_dim=short_dim*2**(1/2)
+    wm, hm = (long_dim, short_dim) if dm[3] else (short_dim, long_dim)
+    wmm, hmm = round(wm*1000), round(hm*1000)
+    return f"{wmm}mmx{hmm}mm"
+
+def us_size_to_in(d):
+    return {"letter": "8.5inx11in", "letterl": "11inx8.5in",
+            "legal": "8.5inx14in", "legall": "14inx8.5in",
+            "ledger": "17inx11in", "ledgerl": "11inx17in",
+            "tabloid": "11inx17in", "tabloidl": "17inx11in",
+            }[d.lower()]
+
 def die(reason):
     print(reason, file=sys.stderr)
-    sys.exit(2)
+    sys.exit(1)
 
 pyver = sys.version_info
 if not (pyver.major == 3 and pyver.minor >= 7):
     die("Requires python 3.7 or later")
 
-parser = argparse.ArgumentParser(description='Create an empty, transparent PDF file.')
+# Override exit code 2 -> 1.
+# This could have been achieved by ArgumentParser(..., exit_on_error=False), but
+# that option doesn't exist in all supported python versions.
+class OurArgumentParser(argparse.ArgumentParser):
+    def exit(self, status=0, message=None):
+        if status == 2: status = 1
+        super().exit(status=status, message=message)
+
+parser = OurArgumentParser(description='Create an empty, transparent PDF file.',
+                           epilog='Part of pdf-sign v0.1.0 © 2021-2025 Axel Svensson')
 parser.add_argument('-o', '--output', metavar='FILE', type=str, help='Output PDF file. (default: empty-DIMENSIONS.pdf)')
-parser.add_argument('-d', '--dimensions', type=str, default='3inx2in', help='The page dimensions of the file to create. Supports units pts, in, cm, and mm. (default: 3inx2in)')
+parser.add_argument('-d', '--dimensions', type=str, default='3inx2in', help='The page dimensions of the file to create in WIDTHxHEIGHT format, e.g. 3inx2in. Supported units are pt, in, cm, and mm. Can also be an ISO or common US size e.g. A4, C5L or letter, with an L suffix meaning landscape. (default: 3inx2in)')
 
 main(parser.parse_args(sys.argv[1:]))
